@@ -51,6 +51,18 @@ def test_tampered_body_fails() -> None:
         )
 
 
+def test_unsignable_body_fails_instead_of_raising_canonicalisation_error() -> None:
+    body = {"serial": "NG-ALC-2026-000001-A"}
+    signature = sign_request(body, NOW, secret=SECRET)
+    with pytest.raises(SignatureError):
+        verify_signed_request(
+            SignedRequest(body={"amount_minor": 335938.0}, signature=signature, timestamp=NOW),
+            secret=SECRET,
+            now=NOW,
+            max_skew_seconds=300,
+        )
+
+
 def test_stale_timestamp_fails() -> None:
     body = {"serial": "NG-ALC-2026-000001-A"}
     signature = sign_request(body, NOW, secret=SECRET)
