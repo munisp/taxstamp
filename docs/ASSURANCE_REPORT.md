@@ -32,11 +32,11 @@ environment, and each is individually sufficient for a BLOCKED decision:
 | --- | --- | --- |
 | Formatting | pass | `evidence/format.log` |
 | Lint (ruff, security rules enabled) | pass | `evidence/lint.log` |
-| Strict typing (mypy strict, no explicit `Any`) | pass, 52 files | `evidence/type.log` |
+| Strict typing (mypy strict, no explicit `Any`) | pass, 57 files | `evidence/type.log` |
 | Static security scan (bandit) | pass, no findings | `evidence/security.log` |
 | Dependency advisories (pip-audit, strict) | pass, none known | `evidence/audit-deps.log` |
-| Tests | pass, 104 tests | `evidence/tests.log` |
-| Coverage | 88% overall, branch coverage on | `evidence/tests.log` |
+| Tests | pass, 133 tests | `evidence/tests.log` |
+| Coverage | 89% overall, branch coverage on | `evidence/tests.log` |
 | Import / entry points | pass | `evidence/import-check.log` |
 | Migration upgrade → downgrade → upgrade | pass | `tests/integration/test_migrations.py`, CI job `quality` |
 | Image build | pass | CI job `image` |
@@ -62,6 +62,24 @@ environment, and each is individually sufficient for a BLOCKED decision:
   verification.
 - **Authorization.** Wrong role, wrong tenant and self-approval are all refused, and
   cross-tenant listing returns nothing.
+- **Legal entitlement.** Procurement requires an effective manufacturer or importer licence
+  covering the ordered category; missing, expired, suspended, revoked, distributor-only and
+  non-covering licences all refuse the order, and a licence that lapses behind an in-flight
+  order is reported by reconciliation.
+- **Stamp accountability.** A spoilage, damage, destruction or return declaration voids the
+  named serials in the same transaction; a declaration whose stamps are still live is
+  reported by reconciliation, so a paper-only declaration cannot hide circulating stamps.
+- **Held funds have an exit.** A quarantined receipt can be applied to a payable order only
+  at the exact amount and currency, or refunded to a named beneficiary, exactly once, and
+  the unapplied-receipts balance returns to zero either way.
+
+## Phase 1 market-parity scope
+
+Licensing, product master data, statutory tariff versioning, stamp accountability and
+treasury resolution close the locally remediable market gaps. Traceability and aggregation,
+regulator repository exports, consumer verification, enforcement cases, KPI reporting and
+offline verification remain unimplemented and are declared as such in
+`docs/FEATURE_CLAIMS.md`; none of them is simulated.
 
 ## Conditions to reach a releaseable state
 
@@ -73,3 +91,6 @@ environment, and each is individually sufficient for a BLOCKED decision:
    the business owner accept their absence in writing.
 5. Obtain legal/compliance sign-off; nothing in this repository constitutes a compliance
    attestation.
+6. Reconcile the local licence register against the issuing authority's register; licences
+   are currently operator-entered with a statutory reference and are not externally
+   confirmed.

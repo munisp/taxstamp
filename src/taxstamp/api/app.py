@@ -18,7 +18,15 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from taxstamp import __version__
 from taxstamp.api.errors import register_error_handlers
 from taxstamp.api.middleware import RequestContextMiddleware
-from taxstamp.api.routers import ops, orders, payments, stamps, verification
+from taxstamp.api.routers import (
+    ops,
+    orders,
+    payments,
+    registry,
+    stamps,
+    treasury,
+    verification,
+)
 from taxstamp.config import Settings, get_settings
 from taxstamp.observability import configure_logging
 from taxstamp.runtime import Runtime, build_runtime
@@ -79,6 +87,8 @@ def create_app(settings: Settings | None = None, *, runtime: Runtime | None = No
     app.include_router(ops.router)
     app.include_router(orders.router)
     app.include_router(payments.router)
+    app.include_router(registry.router)
     app.include_router(stamps.router)
+    app.include_router(treasury.router)
     app.include_router(verification.router)
     return app

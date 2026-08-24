@@ -28,12 +28,19 @@ the flows the bundle claimed, not a patch series against it.
 | 19 | High | Settlement of a cancelled order raised on an illegal transition and rolled the receipt back, losing evidence of received funds | Cancellation closes open intents; settlement locks the order and records an `order_not_payable` receipt posted to `liability:unapplied_receipts` for manual application | `tests/e2e/test_payments_api.py` |
 | 20 | Medium | Reconciliation gauges kept the last non-zero value after a finding resolved | Every declared finding kind is published each run, zero included | `tests/unit/test_reconciliation_report.py` |
 | 21 | High | Requesters could read any batch by id, across tenants | Batch reads resolve the owning order's company and enforce tenant isolation | `tests/e2e/test_authorization.py` |
+| 22 | High | Any KYB-verified company could procure stamps for any category; no legal entitlement was checked | An effective manufacturer or importer licence covering the category is required to submit an order, and the licence is recorded on the order | `tests/e2e/test_registry_api.py` |
+| 23 | Medium | Orders named a free-text category with no product identity, so stamps could not be tied to a real SKU | Company-scoped product master data; a product-backed order is the primary path and withdrawn or foreign products are refused | `tests/e2e/test_registry_api.py` |
+| 24 | High | Two tariffs could cover the same category and date, making the price non-deterministic | Overlapping effective periods are refused on both the API and CLI paths; pre-existing overlaps are reported by reconciliation | `tests/integration/test_registry_governance.py` |
+| 25 | High | Stamps that were spoiled, damaged, destroyed or returned had no disposition record, so a batch could not be accounted for | Serial-level declarations void the stamps in the same transaction, with a reason and an evidence reference, plus a batch population account | `tests/e2e/test_accountability_api.py` |
+| 26 | High | Funds held for a mismatched, unknown-reference or non-payable remittance had no exit: money sat in `liability:unapplied_receipts` forever | Treasury can apply a held receipt to a payable order (exact amount and currency) or refund it to a named beneficiary, exactly once per receipt, with balanced journals | `tests/e2e/test_treasury_api.py` |
+| 27 | Medium | A remittance quoting an unknown reference produced a review event the worker could never deliver, retrying to the dead-letter queue | The review handler accepts an absent expected amount, which is the only case where no intent exists, and still validates the received amount | `tests/e2e/test_treasury_api.py` |
 
 ## Not remediated (external dependency required)
 
 | Area | Why it remains open |
 | --- | --- |
-| Authoritative excise rates and statutory rules | No authoritative source supplied; tariffs are operator-entered with a statutory reference field |
+| Authoritative excise rates and statutory rules | No authoritative source supplied; tariffs are operator-entered with a statutory reference field, and overlapping periods are now refused |
+| Licence register reconciliation against the issuing authority | Licences are recorded locally with a statutory reference; no register feed is available to confirm them |
 | FIRS / NAFDAC / SON / Customs sandbox evidence | No credentials or sandbox endpoints available |
 | Payment provider sandbox evidence | No provider credentials available |
 | Printer / holographic / offline-scanner integration | No hardware, drivers or vendor contracts available |

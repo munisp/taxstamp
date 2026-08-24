@@ -9,8 +9,8 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from taxstamp.enums import KybStatus, RiskTier, Role
-from taxstamp.models import Company, Credential, Principal, Tariff
+from taxstamp.enums import KybStatus, LicenceStatus, LicenceType, ProductStatus, RiskTier, Role
+from taxstamp.models import Company, Credential, Licence, Principal, Product, Tariff
 from taxstamp.money import Money
 from taxstamp.security import generate_token, hash_token
 
@@ -84,6 +84,61 @@ def create_identity(
         role=role,
         company_id=company_id,
     )
+
+
+def create_licence(
+    session: Session,
+    *,
+    company_id: uuid.UUID,
+    licence_type: LicenceType = LicenceType.MANUFACTURER,
+    product_categories: tuple[str, ...] = ("alcohol",),
+    status: LicenceStatus = LicenceStatus.ACTIVE,
+    valid_from: dt.datetime = EPOCH - dt.timedelta(days=365),
+    valid_to: dt.datetime | None = None,
+    now: dt.datetime = EPOCH,
+) -> Licence:
+    licence = Licence(
+        licence_number=f"LIC-{uuid.uuid4().hex[:10].upper()}",
+        company_id=company_id,
+        licence_type=licence_type.value,
+        product_categories=list(product_categories),
+        status=status.value,
+        valid_from=valid_from,
+        valid_to=valid_to,
+        statutory_reference="Test fixture licence (not a legal licence)",
+        created_at=now,
+    )
+    session.add(licence)
+    session.flush()
+    return licence
+
+
+def create_product(
+    session: Session,
+    *,
+    company_id: uuid.UUID,
+    sku: str | None = None,
+    product_category: str = "alcohol",
+    pack_size: int = 12,
+    intended_market: str = "NG",
+    status: ProductStatus = ProductStatus.ACTIVE,
+    now: dt.datetime = EPOCH,
+) -> Product:
+    product = Product(
+        company_id=company_id,
+        sku=sku or f"SKU-{uuid.uuid4().hex[:8].upper()}",
+        brand="Acme Reserve",
+        product_category=product_category,
+        pack_size=pack_size,
+        unit_of_measure="bottle",
+        intended_market=intended_market,
+        status=status.value,
+        withdrawn_at=now if status is ProductStatus.WITHDRAWN else None,
+        created_at=now,
+    )
+    session.add(product)
+    session.flush()
+    return product
 
 
 def create_tariff(

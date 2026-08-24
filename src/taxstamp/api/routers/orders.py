@@ -28,6 +28,8 @@ def _order_document(order: Order) -> JsonObject:
         "order_ref": order.order_ref,
         "company_id": str(order.company_id),
         "product_category": order.product_category,
+        "product_id": str(order.product_id) if order.product_id is not None else None,
+        "licence_id": str(order.licence_id) if order.licence_id is not None else None,
         "quantity": order.quantity,
         "unit_price_minor": order.unit_price_minor,
         "subtotal_minor": order.subtotal_minor,
@@ -61,6 +63,7 @@ def create_order(
             command=order_service.SubmitOrderCommand(
                 company_id=body.company_id,
                 product_category=body.product_category,
+                product_id=body.product_id,
                 quantity=body.quantity,
                 delivery_state=body.delivery_state,
                 delivery_address=body.delivery_address,

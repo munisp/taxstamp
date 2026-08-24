@@ -34,10 +34,15 @@ from taxstamp.enums import (
     ApprovalDecision,
     ApprovalLevel,
     BatchStatus,
+    DispositionKind,
     KybStatus,
+    LicenceStatus,
+    LicenceType,
     OrderStatus,
     PaymentIntentStatus,
+    ProductStatus,
     ReceiptStatus,
+    ResolutionKind,
     RiskTier,
     Role,
     StampStatus,
@@ -132,6 +137,71 @@ class Credential(Base):
     principal: Mapped[Principal] = relationship(lazy="joined")
 
 
+class Licence(Base):
+    """An excise licence: the legal entitlement to manufacture, import or distribute.
+
+    A company may only procure stamps for a product category covered by an effective
+    licence of an ordering type, which is what FCTC Article 6 licensing control means in
+    practice. Suspension and revocation are recorded, never deleted.
+    """
+
+    __tablename__ = "licences"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    licence_number: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
+    )
+    licence_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    product_categories: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default=LicenceStatus.ACTIVE)
+    valid_from: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    valid_to: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    statutory_reference: Mapped[str] = mapped_column(String(255), nullable=False)
+    status_reason: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    status_changed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[dt.datetime] = _created_at()
+
+    __table_args__ = (
+        _enum_check("licence_type", LicenceType),
+        _enum_check("status", LicenceStatus),
+        CheckConstraint("valid_to IS NULL OR valid_to > valid_from", name="validity_range"),
+        CheckConstraint("jsonb_array_length(product_categories) > 0", name="categories_present"),
+        Index("ix_licences_company_status", "company_id", "status"),
+    )
+
+
+class Product(Base):
+    """Registered product master data: the SKU a stamp order is placed against.
+
+    ``intended_market`` is the market of intended retail sale, the field the EU
+    traceability regime requires so diverted product can be recognised.
+    """
+
+    __tablename__ = "products"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
+    )
+    sku: Mapped[str] = mapped_column(String(64), nullable=False)
+    brand: Mapped[str] = mapped_column(String(128), nullable=False)
+    product_category: Mapped[str] = mapped_column(String(64), nullable=False)
+    pack_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    unit_of_measure: Mapped[str] = mapped_column(String(16), nullable=False)
+    intended_market: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default=ProductStatus.ACTIVE)
+    withdrawn_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[dt.datetime] = _created_at()
+
+    __table_args__ = (
+        _enum_check("status", ProductStatus),
+        CheckConstraint("pack_size > 0", name="pack_size_positive"),
+        UniqueConstraint("company_id", "sku", name="uq_products_company_id_sku"),
+        Index("ix_products_company_category", "company_id", "product_category"),
+    )
+
+
 class Tariff(Base):
     """Effective-dated unit price and VAT rate. Pricing provenance lives in the database."""
 
@@ -172,6 +242,15 @@ class Order(Base):
         UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
     )
     product_category: Mapped[str] = mapped_column(String(64), nullable=False)
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT")
+    )
+    # Nullable only because orders created before licensing existed cannot be relicensed
+    # retroactively; the service always sets it, and reconciliation reports any live
+    # order whose licence is missing or no longer effective.
+    licence_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("licences.id", ondelete="RESTRICT")
+    )
     quantity: Mapped[int] = mapped_column(BigInteger, nullable=False)
     tariff_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tariffs.id", ondelete="RESTRICT"), nullable=False
@@ -456,6 +535,76 @@ class Inspection(Base):
         CheckConstraint("sample_size > 0 AND sample_size <= lot_size", name="sample_within_lot"),
         CheckConstraint("defects_found >= 0", name="defects_non_negative"),
         UniqueConstraint("batch_id", name="uq_inspections_batch_id"),
+    )
+
+
+class StampDisposition(Base):
+    """Stamps that left the usable population without being applied to goods.
+
+    Every disposed serial is voided in the same transaction, so the batch population
+    always reconciles: issued = active + issued-unused + void.
+    """
+
+    __tablename__ = "stamp_dispositions"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    batch_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stamp_batches.id", ondelete="RESTRICT"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    stamp_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    serials: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    evidence_reference: Mapped[str] = mapped_column(String(128), nullable=False)
+    declared_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = _created_at()
+
+    __table_args__ = (
+        _enum_check("kind", DispositionKind),
+        CheckConstraint("stamp_count > 0", name="stamp_count_positive"),
+        CheckConstraint("stamp_count = jsonb_array_length(serials)", name="stamp_count_matches_serials"),
+        Index("ix_stamp_dispositions_batch", "batch_id", "created_at"),
+    )
+
+
+class ReceiptResolution(Base):
+    """How a quarantined receipt was cleared out of the unapplied-receipts account.
+
+    Unique per receipt: funds held once can be applied or refunded once.
+    """
+
+    __tablename__ = "receipt_resolutions"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    payment_receipt_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("payment_receipts.id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    order_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("orders.id", ondelete="RESTRICT")
+    )
+    journal_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journals.id", ondelete="RESTRICT"), nullable=False
+    )
+    beneficiary_reference: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    actor_principal_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = _created_at()
+
+    __table_args__ = (
+        _enum_check("kind", ResolutionKind),
+        CheckConstraint("(kind <> 'applied') OR (order_id IS NOT NULL)", name="applied_requires_order"),
+        CheckConstraint(
+            "(kind <> 'refunded') OR (char_length(beneficiary_reference) > 0)",
+            name="refund_requires_beneficiary",
+        ),
     )
 
 
