@@ -55,6 +55,8 @@ the flows the bundle claimed, not a patch series against it.
 | 45 | High | Releasing seized goods left the parent case's stored exposure unchanged, so the open-case component of revenue at risk overstated the programme's exposure | Settling a seizure recomputes the case exposure from the seizures still held or forfeited, under the case lock taken first to preserve the existing lock order | `tests/e2e/test_enforcement_api.py` |
 | 46 | High | A handover submitted with a non-UTC offset was hashed in that offset but read back in UTC, so an untampered custody chain verified as broken | The hashed handover document is built in one place and normalises the handover time to UTC for both hashing and verification | `tests/e2e/test_enforcement_api.py` |
 | 47 | Medium | A signed body failing schema validation raised through the router, returning 500 instead of a validation response, because signed requests are validated after the signature check rather than by the framework | Signed bodies are validated through a shared helper that reports the offending fields as a validation failure; applied to field verification and remittance advice | `tests/e2e/test_lifecycle.py` |
+||||||| parent of 05a575d (Reject unsignable request bodies as unauthenticated)
+| 48 | Medium | A signed body containing a float could not be canonicalised, so signature verification raised and the request returned a server error | A body that cannot be canonicalised can never bear a valid signature, so verification rejects it as unauthenticated | `tests/unit/test_security.py`, `tests/e2e/test_payments_api.py` |
 
 ## Not remediated (external dependency required)
 
