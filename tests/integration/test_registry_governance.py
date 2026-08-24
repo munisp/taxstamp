@@ -22,7 +22,13 @@ JULY = dt.datetime(2027, 7, 1, tzinfo=dt.UTC)
 
 
 def _counts(session: Session, now: dt.datetime) -> dict[str, int]:
-    return run_reconciliation(session, now=now, audit_secret="s" * 32).counts_by_kind()
+    return run_reconciliation(
+        session,
+        now=now,
+        audit_secret="s" * 32,
+        export_secret="e" * 32,
+        transparency_secret="t" * 32,
+    ).counts_by_kind()
 
 
 def test_a_tariff_overlapping_an_open_ended_rate_is_refused(

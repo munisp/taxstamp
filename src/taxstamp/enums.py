@@ -124,6 +124,156 @@ class ResolutionKind(StrEnum):
     REFUNDED = "refunded"
 
 
+class FacilityKind(StrEnum):
+    """Where in the supply chain a movement is recorded.
+
+    Facility identification is what makes a movement record meaningful: an event without
+    a known origin or destination cannot be checked against anything.
+    """
+
+    FACTORY = "factory"
+    WAREHOUSE = "warehouse"
+    DISTRIBUTION_CENTRE = "distribution_centre"
+    RETAIL = "retail"
+    PORT = "port"
+    FREE_ZONE = "free_zone"
+    DUTY_FREE_OUTLET = "duty_free_outlet"
+    DESTRUCTION_SITE = "destruction_site"
+
+
+class TradeUnitLevel(StrEnum):
+    CASE = "case"
+    PALLET = "pallet"
+    CONTAINER = "container"
+
+
+#: Aggregation order, smallest first. A unit may only contain units one level below it.
+TRADE_UNIT_HIERARCHY: tuple[TradeUnitLevel, ...] = (
+    TradeUnitLevel.CASE,
+    TradeUnitLevel.PALLET,
+    TradeUnitLevel.CONTAINER,
+)
+
+
+def child_level(level: TradeUnitLevel) -> TradeUnitLevel | None:
+    """The level a unit of ``level`` may contain, or None for the lowest level."""
+    index = TRADE_UNIT_HIERARCHY.index(level)
+    return None if index == 0 else TRADE_UNIT_HIERARCHY[index - 1]
+
+
+class TradeUnitStatus(StrEnum):
+    CLOSED = "closed"
+    IN_TRANSIT = "in_transit"
+    DELIVERED = "delivered"
+    EXPORTED = "exported"
+    DESTROYED = "destroyed"
+    DISAGGREGATED = "disaggregated"
+
+
+TRADE_UNIT_TRANSITIONS: dict[TradeUnitStatus, frozenset[TradeUnitStatus]] = {
+    TradeUnitStatus.CLOSED: frozenset(
+        {
+            TradeUnitStatus.IN_TRANSIT,
+            TradeUnitStatus.EXPORTED,
+            TradeUnitStatus.DESTROYED,
+            TradeUnitStatus.DISAGGREGATED,
+        }
+    ),
+    TradeUnitStatus.IN_TRANSIT: frozenset(
+        {
+            TradeUnitStatus.IN_TRANSIT,
+            TradeUnitStatus.DELIVERED,
+            TradeUnitStatus.EXPORTED,
+            TradeUnitStatus.DESTROYED,
+        }
+    ),
+    TradeUnitStatus.DELIVERED: frozenset(
+        {
+            TradeUnitStatus.IN_TRANSIT,
+            TradeUnitStatus.DESTROYED,
+            TradeUnitStatus.DISAGGREGATED,
+        }
+    ),
+    TradeUnitStatus.EXPORTED: frozenset(set()),
+    TradeUnitStatus.DESTROYED: frozenset(set()),
+    TradeUnitStatus.DISAGGREGATED: frozenset(set()),
+}
+
+
+class TraceEventType(StrEnum):
+    """The movement events the EU traceability regime requires to be recorded."""
+
+    DISPATCH = "dispatch"
+    ARRIVAL = "arrival"
+    TRANSLOAD = "transload"
+    EXPORT = "export"
+    DESTRUCTION = "destruction"
+
+
+#: Unit status implied by each movement event.
+TRACE_EVENT_RESULT: dict[TraceEventType, TradeUnitStatus] = {
+    TraceEventType.DISPATCH: TradeUnitStatus.IN_TRANSIT,
+    TraceEventType.ARRIVAL: TradeUnitStatus.DELIVERED,
+    TraceEventType.TRANSLOAD: TradeUnitStatus.IN_TRANSIT,
+    TraceEventType.EXPORT: TradeUnitStatus.EXPORTED,
+    TraceEventType.DESTRUCTION: TradeUnitStatus.DESTROYED,
+}
+
+
+class CustomsRegime(StrEnum):
+    """Why a consignment is, or is not, liable to carry a domestic excise stamp."""
+
+    IMPORT_DUTY_PAID = "import_duty_paid"
+    FREE_ZONE = "free_zone"
+    TRANSIT = "transit"
+    DUTY_FREE = "duty_free"
+
+
+#: Regimes whose goods must carry domestic stamps before release into the market.
+STAMP_LIABLE_REGIMES: frozenset[CustomsRegime] = frozenset({CustomsRegime.IMPORT_DUTY_PAID})
+
+
+class ConsignmentStatus(StrEnum):
+    DECLARED = "declared"
+    STAMPS_LINKED = "stamps_linked"
+    RELEASED = "released"
+    REJECTED = "rejected"
+
+
+CONSIGNMENT_TRANSITIONS: dict[ConsignmentStatus, frozenset[ConsignmentStatus]] = {
+    ConsignmentStatus.DECLARED: frozenset(
+        {
+            ConsignmentStatus.STAMPS_LINKED,
+            ConsignmentStatus.RELEASED,
+            ConsignmentStatus.REJECTED,
+        }
+    ),
+    ConsignmentStatus.STAMPS_LINKED: frozenset({ConsignmentStatus.RELEASED, ConsignmentStatus.REJECTED}),
+    ConsignmentStatus.RELEASED: frozenset(set()),
+    ConsignmentStatus.REJECTED: frozenset(set()),
+}
+
+
+class AnomalyKind(StrEnum):
+    """Deterministic, reason-coded findings from movement and scan geometry."""
+
+    IMPOSSIBLE_TRAVEL = "impossible_travel"
+    QUANTITY_NOT_CONSERVED = "quantity_not_conserved"
+    DUPLICATE_SCAN_DIVERGENCE = "duplicate_scan_divergence"
+    MARKET_DIVERSION = "market_diversion"
+
+
+class AnomalySeverity(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class ExportKind(StrEnum):
+    PORTABILITY = "portability"
+    REGULATOR = "regulator"
+
+
 class ApprovalLevel(StrEnum):
     ANALYST = "analyst"
     SUPERVISOR = "supervisor"
@@ -191,3 +341,13 @@ def assert_order_transition(current: OrderStatus, target: OrderStatus) -> None:
 
 def assert_stamp_transition(current: StampStatus, target: StampStatus) -> None:
     assert_transition("stamp", STAMP_TRANSITIONS, current, target)
+
+
+def assert_trade_unit_transition(current: TradeUnitStatus, target: TradeUnitStatus) -> None:
+    if target not in TRADE_UNIT_TRANSITIONS.get(current, frozenset()):
+        raise TransitionError(f"trade_unit: illegal transition {current.value} -> {target.value}")
+
+
+def assert_consignment_transition(current: ConsignmentStatus, target: ConsignmentStatus) -> None:
+    if target not in CONSIGNMENT_TRANSITIONS.get(current, frozenset()):
+        raise TransitionError(f"consignment: illegal transition {current.value} -> {target.value}")

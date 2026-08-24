@@ -131,7 +131,11 @@ def _reconcile(_args: argparse.Namespace) -> int:
     runtime = build_runtime()
     with transaction(runtime.session_factory) as session:
         report = run_reconciliation(
-            session, now=runtime.clock.now(), audit_secret=runtime.settings.audit_chain_secret
+            session,
+            now=runtime.clock.now(),
+            audit_secret=runtime.settings.audit_chain_secret,
+            export_secret=runtime.settings.export_signing_secret,
+            transparency_secret=runtime.settings.transparency_signing_secret,
         )
     print(report.as_document())  # noqa: T201 - CLI output
     runtime.close()

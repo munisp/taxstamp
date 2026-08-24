@@ -45,6 +45,8 @@ SECRETS = {
     "device_hmac_secret": "test-device-hmac-secret-" + "b" * 40,
     "payment_webhook_secret": "test-payment-webhook-secret-" + "c" * 40,
     "audit_chain_secret": "test-audit-chain-secret-" + "d" * 40,
+    "export_signing_secret": "test-export-signing-secret-" + "e" * 40,
+    "transparency_signing_secret": "test-transparency-signing-secret-" + "f" * 40,
 }
 CLOCK_START = dt.datetime(2026, 3, 1, 12, 0, tzinfo=dt.UTC)
 

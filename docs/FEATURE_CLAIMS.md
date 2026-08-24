@@ -27,6 +27,15 @@ code path pretends otherwise).
 | Transactional outbox with dead-lettering | implemented | `tests/integration/test_outbox.py`, `tests/fault` anchor-outage test |
 | Reconciliation | implemented | `services/reconciliation.py`, `tests/fault` injected-defect test |
 | Batch anchoring / notarisation | configuration-dependent | `providers/anchor.py`; unconfigured anchor keeps the outbox message pending, never marks it delivered |
+| Supply-chain traceability events (dispatch, arrival, transload, export, destruction) | implemented | `tests/e2e/test_traceability_api.py` (state machine, declared-quantity conservation, destruction voids the stamps it covers) |
+| Aggregation and disaggregation (stamp → case → pallet → container) | implemented | `tests/e2e/test_traceability_api.py` (a stamp belongs to one open unit; a packed unit cannot move independently of its parent) |
+| Repository queries by stamp, unit, movement and time range | implemented | `services/repository.py`, `tests/e2e/test_traceability_api.py`; every sensitive query is recorded in the audit chain and scoped to the reader's tenant |
+| Import, free-zone, transit and duty-free consignments | implemented | `tests/e2e/test_customs_disclosure_api.py` (domestic release only under a duty-paid regime, only with an operator-entered customs evidence reference, and only once linked stamps equal the declared quantity) |
+| Clone and diversion detection | implemented | `services/anomaly.py`, `tests/e2e/test_traceability_api.py`; deterministic rules only (impossible travel, quantity divergence, intended-market divergence, duplicate-scan divergence), each finding carrying its rule version and evidence |
+| Public transparency log (Merkle checkpoints and inclusion proofs) | implemented | `services/transparency.py`, `tests/unit/test_merkle.py`, `tests/e2e/test_customs_disclosure_api.py`; a proof verifies against the published root without database access |
+| EPCIS-shaped interoperability | implemented (shape only) | `services/epcis.py`; the envelope declares that it has not been validated against the GS1 conformance suite and that identifiers are platform URNs, because no GS1 company prefix is configured |
+| Regulator export delivery | configuration-dependent | `api/routers/disclosure.py`; with no repository endpoint configured the response states that no delivery occurred, and a configured endpoint is delivered by the outbox relay rather than claimed synchronously |
+| Retention and data portability | implemented | `retention.py`, `GET /v1/retention-policy`, `POST /v1/exports/portability`; expiry is archive-only, statutory records are never destructively erased, and every export carries a canonical hash and signature |
 | Image / ML stamp authenticity | not implemented | declared unavailable in `capabilities.py`; no confidence score is produced anywhere |
 | Printer production control (HP / Zebra / Atlantic Zeiser / Kurz) | not implemented | declared unavailable; no device driver is present |
 | Holographic / taggant verification | not implemented | declared unavailable |
@@ -40,13 +49,6 @@ Art. 8 and EU Implementing Regulation 2018/574. These are scheduled, not claimed
 
 | Capability | Status |
 | --- | --- |
-| Supply-chain traceability events and aggregation (item → pack → case → pallet) | not implemented |
-| Regulator repository queries and statutory exports | not implemented |
-| Import, free-zone and duty-free flows | not implemented |
-| Retention and data-portability controls | not implemented |
-| Clone and diversion detection | not implemented |
-| Public transparency log | not implemented |
-| EPCIS-shaped interoperability | not implemented |
 | Consumer verification channel | not implemented |
 | Enforcement case management | not implemented |
 | Revenue and compliance KPI reporting | not implemented |

@@ -19,11 +19,14 @@ from taxstamp import __version__
 from taxstamp.api.errors import register_error_handlers
 from taxstamp.api.middleware import RequestContextMiddleware
 from taxstamp.api.routers import (
+    customs,
+    disclosure,
     ops,
     orders,
     payments,
     registry,
     stamps,
+    traceability,
     treasury,
     verification,
 )
@@ -84,11 +87,14 @@ def create_app(settings: Settings | None = None, *, runtime: Runtime | None = No
         )
 
     register_error_handlers(app)
+    app.include_router(customs.router)
+    app.include_router(disclosure.router)
     app.include_router(ops.router)
     app.include_router(orders.router)
     app.include_router(payments.router)
     app.include_router(registry.router)
     app.include_router(stamps.router)
+    app.include_router(traceability.router)
     app.include_router(treasury.router)
     app.include_router(verification.router)
     return app

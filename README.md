@@ -11,6 +11,16 @@ licence covering the ordered product category before it can order stamps
 (`/v1/treasury/unapplied-receipts`), and spoiled, damaged, destroyed or returned stamps are
 declared per serial (`POST /v1/batches/{id}/dispositions`).
 
+Issued marks are then traceable through the supply chain: stamps are aggregated into cases,
+pallets and containers (`POST /v1/units`), movements are recorded against the outermost unit
+(`POST /v1/trace-events`), imported and duty-suspended goods are declared as consignments
+(`POST /v1/consignments`) and released only when their stamps account for the declared
+quantity. Contradictions between records surface as deterministic findings
+(`GET /v1/anomalies`), the audit chain is committed to publicly
+(`/v1/transparency/checkpoints`, with inclusion proofs), and disclosure is served by signed
+exports (`/v1/exports/regulator`, `/v1/exports/portability`) under a published retention
+policy (`GET /v1/retention-policy`).
+
 ## What is real and what is not
 
 Every externally dependent flow is declared in `GET /v1/capabilities` and in

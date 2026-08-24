@@ -37,6 +37,8 @@ services:
       TAXSTAMP_DEVICE_HMAC_SECRET: development-device-hmac-secret-value-not-for-any-real-use
       TAXSTAMP_PAYMENT_WEBHOOK_SECRET: development-payment-webhook-secret-value-not-for-real-use
       TAXSTAMP_AUDIT_CHAIN_SECRET: development-audit-chain-secret-value-not-for-any-real-use
+      TAXSTAMP_EXPORT_SIGNING_SECRET: development-export-signing-secret-value-not-for-real-use
+      TAXSTAMP_TRANSPARENCY_SIGNING_SECRET: development-transparency-signing-value-not-for-real
       TAXSTAMP_REQUIRE_TLS: "false"
     depends_on:
       postgres: {condition: service_healthy}

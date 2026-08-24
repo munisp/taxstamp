@@ -30,6 +30,8 @@ def _env(settings: Settings) -> dict[str, str]:
         "TAXSTAMP_DEVICE_HMAC_SECRET": settings.device_hmac_secret,
         "TAXSTAMP_PAYMENT_WEBHOOK_SECRET": settings.payment_webhook_secret,
         "TAXSTAMP_AUDIT_CHAIN_SECRET": settings.audit_chain_secret,
+        "TAXSTAMP_EXPORT_SIGNING_SECRET": settings.export_signing_secret,
+        "TAXSTAMP_TRANSPARENCY_SIGNING_SECRET": settings.transparency_signing_secret,
         "TAXSTAMP_REQUIRE_TLS": "false",
         "PYTHONPATH": str(REPO_ROOT / "src"),
     }

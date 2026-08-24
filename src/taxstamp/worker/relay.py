@@ -89,6 +89,8 @@ def reconcile_once(runtime: Runtime) -> bool:
             session,
             now=runtime.clock.now(),
             audit_secret=runtime.settings.audit_chain_secret,
+            export_secret=runtime.settings.export_signing_secret,
+            transparency_secret=runtime.settings.transparency_signing_secret,
         )
         for kind, count in report.counts_by_kind().items():
             runtime.metrics["reconciliation_findings"].labels(kind=kind).set(count)

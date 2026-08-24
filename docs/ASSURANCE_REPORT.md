@@ -73,13 +73,45 @@ environment, and each is individually sufficient for a BLOCKED decision:
   at the exact amount and currency, or refunded to a named beneficiary, exactly once, and
   the unapplied-receipts balance returns to zero either way.
 
-## Phase 1 market-parity scope
+## Market-parity scope
 
-Licensing, product master data, statutory tariff versioning, stamp accountability and
-treasury resolution close the locally remediable market gaps. Traceability and aggregation,
-regulator repository exports, consumer verification, enforcement cases, KPI reporting and
-offline verification remain unimplemented and are declared as such in
-`docs/FEATURE_CLAIMS.md`; none of them is simulated.
+Phase 1 closed licensing, product master data, statutory tariff versioning, stamp
+accountability and treasury resolution.
+
+Phase 2 adds supply-chain traceability with aggregation, a queryable repository, import and
+duty-suspension regimes, retention and portability, deterministic clone/diversion findings,
+a Merkle transparency log with inclusion proofs, and EPCIS-shaped export documents. Three
+limits are deliberate and visible at runtime: the EPCIS envelope declares that it has not
+been validated against the GS1 conformance suite (no GS1 company prefix is configured), a
+regulator export states that no delivery occurred when no repository endpoint is
+configured, and a checkpoint states that it is not externally anchored when no anchor
+endpoint is configured.
+
+Consumer verification, enforcement cases, KPI reporting, offline verification bundles and
+risk analytics remain unimplemented and are declared as such in `docs/FEATURE_CLAIMS.md`;
+none of them is simulated.
+
+### Phase 2 evidence
+
+- **Aggregation integrity.** A stamp can belong to only one open unit (partial unique
+  index), a packed unit cannot be moved independently of its parent, and a movement whose
+  declared count differs from the unit's contents is refused.
+- **Destruction.** A destruction event voids the covered serials in the same transaction,
+  so a destroyed stamp no longer verifies as authentic.
+- **Customs control.** Domestic release requires a duty-paid regime, an operator-entered
+  customs evidence reference and linked stamps equal to the declared quantity; free-zone,
+  transit and duty-free consignments are refused release. One stamp cannot cover two
+  consignments (unique constraint), and a shortfall is reported by reconciliation.
+- **Detection.** Findings are produced only by named deterministic rules from stored
+  evidence, carry the rule version, and are deduplicated so re-running detection cannot
+  inflate the queue.
+- **Transparency.** Each checkpoint chains onto its predecessor's root, and an inclusion
+  proof recomputes the published root from the leaf alone, verified independently in
+  `tests/unit/test_merkle.py` and over HTTP.
+- **Disclosure integrity.** Every export is hashed over canonical JSON and signed with a
+  purpose-separated key; a duplicate export reference is refused, oversized exports are
+  refused rather than silently truncated, and reconciliation re-verifies stored export and
+  checkpoint signatures.
 
 ## Conditions to reach a releaseable state
 

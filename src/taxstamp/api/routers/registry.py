@@ -16,17 +16,14 @@ from taxstamp.api.schemas import (
     LicenceStatusRequest,
     RegisterProductRequest,
 )
-from taxstamp.enums import LicenceType, Role
+from taxstamp.enums import LicenceType
 from taxstamp.errors import Forbidden
 from taxstamp.jsontypes import JsonObject
 from taxstamp.models import Licence, Product
 from taxstamp.services import registry as registry_service
-from taxstamp.services.context import Actor
+from taxstamp.services.context import CROSS_TENANT_READERS, Actor
 
 router = APIRouter(prefix="/v1", tags=["registry"])
-
-#: Roles that supervise the register as a whole and therefore read across tenants.
-CROSS_TENANT_READERS: frozenset[Role] = frozenset({Role.ANALYST, Role.SUPERVISOR, Role.ADMIN})
 
 
 def _licence_document(licence: Licence) -> JsonObject:

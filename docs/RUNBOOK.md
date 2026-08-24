@@ -41,7 +41,27 @@
 | Amount mismatch queue growing | Receipts are quarantined in `liability:unapplied_receipts`. List them with `GET /v1/treasury/unapplied-receipts`, then either apply one to its payable order (exact amount and currency) with `POST /v1/treasury/unapplied-receipts/{id}/application` or return it with `POST .../refund` naming the beneficiary. Each receipt resolves once. |
 | `order_without_effective_licence` finding | An in-flight procurement now sits behind a licence that is missing, expired, suspended, revoked or not an ordering type. Decide per order: reinstate the licence, or cancel the order. Issuance is not blocked automatically once the order is already paid. |
 | `disposition_not_voided` finding | Stamps declared spoiled, damaged, destroyed or returned are still live. Treat as potential diversion: identify the serials from `stamp_dispositions.serials` and investigate before voiding. |
+| `unit_quantity_not_conserved` finding | A trade unit's recorded stamp count no longer matches its members or its children. Do not reconcile by editing the count: identify the unit from the finding, re-scan it, and record a correcting aggregation or disaggregation so the history explains the change. |
+| `consignment_short_of_stamps` finding | A consignment carries fewer linked stamps than it declared. Release is already blocked; investigate the shortfall with customs before linking further stamps. |
+| `export_integrity_broken` finding | A stored export's signature no longer matches its content hash. Treat as a security incident: preserve the database, snapshot it, and escalate — the disclosure evidence can no longer be relied on. |
+| `checkpoint_root_broken` finding | A published transparency checkpoint no longer matches the audit chain it commits to. Treat as a security incident and escalate; do not publish further checkpoints until the cause is known. |
+| Anomaly queue growing (`GET /v1/anomalies`) | Findings are deterministic contradictions, not scores. Work each one from its stored evidence and rule version; an impossible-travel finding usually means either a mis-keyed facility or a cloned mark. |
 | `overlapping_tariff` finding | Two rates cover the same category and date, so pricing is ambiguous. Close the earlier rate's effective period; new overlapping rates are refused at entry. |
+
+## Retention, legal hold and portability
+
+- The published policy is served from `GET /v1/retention-policy`; expiry is archive-only and
+  statutory records are never destructively erased.
+- A legal hold is an operator declaration recorded in the audit chain. No automated purge
+  exists, so a hold suspends nothing: it is evidence that the records must not be archived
+  out of the live database.
+- A company's own data is exported with `POST /v1/exports/portability`, and a regulator
+  disclosure with `POST /v1/exports/regulator`. Both carry a canonical-JSON hash and a
+  purpose-separated signature; verify them with the export signing secret before relying on
+  a copy that has left the platform.
+- Regulator delivery is never claimed by the request that creates the export. With no
+  repository endpoint configured, nothing is delivered; with one configured, the outbox
+  relay delivers it and the outbox is the record of whether it arrived.
 
 ## Observability
 

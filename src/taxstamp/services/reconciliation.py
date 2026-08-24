@@ -22,7 +22,7 @@ from taxstamp.enums import (
     ReceiptStatus,
     ResolutionKind,
 )
-from taxstamp.jsontypes import JsonObject, JsonValue
+from taxstamp.jsontypes import JsonArray, JsonObject, JsonValue
 from taxstamp.ledger import Account, account_balance, unbalanced_journals
 from taxstamp.models import (
     Journal,
@@ -37,7 +37,11 @@ from taxstamp.models import (
     StampBatch,
 )
 from taxstamp.services.accountability import unaccounted_dispositions
+from taxstamp.services.customs import consignments_short_of_stamps
+from taxstamp.services.exports import export_integrity_failures
 from taxstamp.services.registry import overlapping_tariffs
+from taxstamp.services.traceability import units_with_broken_conservation
+from taxstamp.services.transparency import checkpoints_with_broken_root
 
 #: Every kind a run can report. Published unconditionally so a resolved finding
 #: reports zero instead of keeping its last non-zero value in the gauge.
@@ -53,6 +57,10 @@ FINDING_KINDS: tuple[str, ...] = (
     "overlapping_tariff",
     "order_without_effective_licence",
     "disposition_not_voided",
+    "unit_quantity_not_conserved",
+    "consignment_short_of_stamps",
+    "export_integrity_broken",
+    "checkpoint_root_broken",
 )
 
 
@@ -337,11 +345,61 @@ def _dispositions_not_voided(session: Session) -> Finding | None:
     )
 
 
+def _units_not_conserved(session: Session) -> Finding | None:
+    rows = units_with_broken_conservation(session)
+    if not rows:
+        return None
+    return Finding(
+        kind="unit_quantity_not_conserved",
+        count=len(rows),
+        detail={
+            "units": [
+                {"unit_code": code, "recorded": recorded, "contained": contained}
+                for code, recorded, contained in rows[:20]
+            ]
+        },
+    )
+
+
+def _consignments_short_of_stamps(session: Session) -> Finding | None:
+    rows = consignments_short_of_stamps(session)
+    if not rows:
+        return None
+    return Finding(
+        kind="consignment_short_of_stamps",
+        count=len(rows),
+        detail={
+            "consignments": [
+                {"consignment_ref": ref, "declared": declared, "linked": linked}
+                for ref, declared, linked in rows[:20]
+            ]
+        },
+    )
+
+
+def _export_integrity(session: Session, *, export_secret: str) -> Finding | None:
+    refs = export_integrity_failures(session, export_secret=export_secret)
+    if not refs:
+        return None
+    listed: JsonArray = list(refs[:20])
+    return Finding(kind="export_integrity_broken", count=len(refs), detail={"export_refs": listed})
+
+
+def _checkpoint_integrity(session: Session, *, checkpoint_secret: str) -> Finding | None:
+    refs = checkpoints_with_broken_root(session, checkpoint_secret=checkpoint_secret)
+    if not refs:
+        return None
+    listed: JsonArray = list(refs[:20])
+    return Finding(kind="checkpoint_root_broken", count=len(refs), detail={"checkpoint_refs": listed})
+
+
 def run_reconciliation(
     session: Session,
     *,
     now: dt.datetime,
     audit_secret: str,
+    export_secret: str,
+    transparency_secret: str,
     outbox_stale_after_seconds: int = 900,
 ) -> ReconciliationReport:
     checks = [
@@ -356,6 +414,10 @@ def run_reconciliation(
         _overlapping_tariffs(session),
         _orders_without_effective_licence(session, now=now),
         _dispositions_not_voided(session),
+        _units_not_conserved(session),
+        _consignments_short_of_stamps(session),
+        _export_integrity(session, export_secret=export_secret),
+        _checkpoint_integrity(session, checkpoint_secret=transparency_secret),
     ]
     findings = tuple(finding for finding in checks if finding is not None)
     report = ReconciliationReport(findings=findings, checks_run=len(checks))
