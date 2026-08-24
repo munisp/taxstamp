@@ -28,6 +28,19 @@ from taxstamp.models import (
     StampBatch,
 )
 
+#: Every kind a run can report. Published unconditionally so a resolved finding
+#: reports zero instead of keeping its last non-zero value in the gauge.
+FINDING_KINDS: tuple[str, ...] = (
+    "unbalanced_journal",
+    "funds_not_conserved",
+    "paid_order_without_receipt",
+    "settled_intent_without_paid_order",
+    "issuance_count_mismatch",
+    "duplicate_serial",
+    "outbox_backlog",
+    "audit_chain_broken",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class Finding:
@@ -44,6 +57,13 @@ class ReconciliationReport:
     @property
     def clean(self) -> bool:
         return not self.findings
+
+    def counts_by_kind(self) -> dict[str, int]:
+        """Every known kind, with zero for kinds this run did not report."""
+        counts = dict.fromkeys(FINDING_KINDS, 0)
+        for finding in self.findings:
+            counts[finding.kind] = finding.count
+        return counts
 
     def as_document(self) -> JsonObject:
         return {

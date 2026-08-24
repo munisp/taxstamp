@@ -164,3 +164,47 @@ def test_duplicate_delivery_settles_once(
     with session_factory() as session:
         entries = session.execute(select(LedgerEntry)).scalars().all()
     assert sum(e.amount_minor for e in entries if e.direction == "debit") == int(payment["amount_minor"])
+
+
+def test_settlement_for_a_cancelled_order_is_quarantined(
+    client: TestClient,
+    settings: Settings,
+    clock: FixedClock,
+    tenant: Tenant,
+    awaiting_payment: dict[str, object],
+    session_factory: sessionmaker[Session],
+) -> None:
+    """Money that arrives after cancellation is held, never forced onto the order."""
+    payment = awaiting_payment["payment"]
+    assert isinstance(payment, dict)
+    cancelled = client.post(
+        f"/v1/orders/{awaiting_payment['id']}/cancel",
+        json={"reason": "duplicate request raised in error"},
+        headers=auth(tenant.requester.token, new_key("cancel")),
+    )
+    assert cancelled.status_code == 200
+
+    response = post_remittance(
+        client,
+        Remittance(
+            external_reference="BANK-CANCELLED-1",
+            payment_reference=str(payment["reference"]),
+            amount_minor=int(payment["amount_minor"]),
+            currency="NGN",
+            value_date=clock.now(),
+        ),
+        secret=settings.payment_webhook_secret,
+        now=clock.now(),
+    )
+    assert response.status_code == 202  # type: ignore[attr-defined]
+    document = response.json()  # type: ignore[attr-defined]
+    assert document["status"] == "order_not_payable"
+
+    with session_factory() as session:
+        order = session.execute(select(Order)).scalars().one()
+        entries = session.execute(select(LedgerEntry)).scalars().all()
+    assert order.status == "cancelled"
+    assert any(entry.account == "liability:unapplied_receipts" for entry in entries)
+    assert sum(e.amount_minor for e in entries if e.direction == "debit") == sum(
+        e.amount_minor for e in entries if e.direction == "credit"
+    )

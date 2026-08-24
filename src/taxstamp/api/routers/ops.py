@@ -70,8 +70,8 @@ def reconcile(runtime: RuntimeDep, current: CurrentActor) -> JsonObject:
             now=runtime.clock.now(),
             audit_secret=runtime.settings.audit_chain_secret,
         )
-        for finding in report.findings:
-            runtime.metrics["reconciliation_findings"].labels(kind=finding.kind).set(finding.count)
+        for kind, count in report.counts_by_kind().items():
+            runtime.metrics["reconciliation_findings"].labels(kind=kind).set(count)
         return report.as_document()
 
 

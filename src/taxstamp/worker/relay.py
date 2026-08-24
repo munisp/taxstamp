@@ -90,8 +90,9 @@ def reconcile_once(runtime: Runtime) -> bool:
             now=runtime.clock.now(),
             audit_secret=runtime.settings.audit_chain_secret,
         )
+        for kind, count in report.counts_by_kind().items():
+            runtime.metrics["reconciliation_findings"].labels(kind=kind).set(count)
         for finding in report.findings:
-            runtime.metrics["reconciliation_findings"].labels(kind=finding.kind).set(finding.count)
             logger.error("reconciliation_finding", kind=finding.kind, count=finding.count)
         return report.clean
 

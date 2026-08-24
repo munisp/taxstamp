@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
 from taxstamp.config import Settings
-from taxstamp.enums import Role
+from taxstamp.enums import BatchStatus, Role
+from taxstamp.models import StampBatch
 from tests.support.api import auth, new_key
 from tests.support.factories import create_company, create_identity
 from tests.support.tenant import Tenant
@@ -139,3 +142,33 @@ def test_idempotency_key_is_required_for_mutations(client: TestClient, tenant: T
     )
     assert response.status_code == 422
     assert "Idempotency-Key" in response.text
+
+
+def test_requester_cannot_read_another_tenants_batch(
+    client: TestClient, tenant: Tenant, settings: Settings, session_factory: sessionmaker[Session]
+) -> None:
+    created = client.post(
+        "/v1/orders",
+        json={"company_id": str(tenant.company.id), **ORDER_BODY},
+        headers=auth(tenant.requester.token, new_key("order")),
+    )
+    assert created.status_code == 201
+    with session_factory() as session:
+        batch = StampBatch(
+            order_id=uuid.UUID(created.json()["id"]),
+            requested_count=10,
+            issued_count=0,
+            status=BatchStatus.PENDING.value,
+        )
+        session.add(batch)
+        other_company = create_company(session)
+        outsider = create_identity(
+            session,
+            role=Role.REQUESTER,
+            api_token_secret=settings.api_token_secret,
+            company_id=other_company.id,
+        )
+        session.commit()
+        batch_id = batch.id
+    assert client.get(f"/v1/batches/{batch_id}", headers=auth(outsider.token)).status_code == 403
+    assert client.get(f"/v1/batches/{batch_id}", headers=auth(tenant.requester.token)).status_code == 200
