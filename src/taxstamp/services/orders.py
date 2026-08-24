@@ -372,6 +372,16 @@ def cancel_order(
         actor.require_role(Role.REQUESTER)
         actor.require_company(order.company_id)
     _transition(session, order, OrderStatus.CANCELLED, actor=actor, reason=reason, now=now)
+    open_intents = session.execute(
+        select(PaymentIntent)
+        .where(
+            PaymentIntent.order_id == order.id,
+            PaymentIntent.status == PaymentIntentStatus.AWAITING_PAYMENT.value,
+        )
+        .with_for_update()
+    ).scalars()
+    for intent in open_intents:
+        intent.status = PaymentIntentStatus.CANCELLED.value
     record_audit_event(
         session,
         actor=actor.audit_actor(),

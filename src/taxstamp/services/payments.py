@@ -76,13 +76,23 @@ def ingest_remittance(
         select(PaymentIntent).where(PaymentIntent.reference == advice.declared_reference).with_for_update()
     ).scalar_one_or_none()
 
+    order: Order | None = None
+    if intent is not None:
+        order = session.execute(
+            select(Order).where(Order.id == intent.order_id).with_for_update()
+        ).scalar_one()
+
     if intent is None:
         status = ReceiptStatus.UNKNOWN_REFERENCE
     elif (
-        intent.amount_minor != advice.amount_minor
-        or intent.currency != advice.currency
-        or intent.status != PaymentIntentStatus.AWAITING_PAYMENT.value
+        intent.status != PaymentIntentStatus.AWAITING_PAYMENT.value
+        or order is None
+        or OrderStatus(order.status) is not OrderStatus.AWAITING_PAYMENT
     ):
+        # The order was cancelled or has moved on: the money still arrived, so it is
+        # quarantined rather than forced onto an order that cannot legally become paid.
+        status = ReceiptStatus.ORDER_NOT_PAYABLE
+    elif intent.amount_minor != advice.amount_minor or intent.currency != advice.currency:
         status = ReceiptStatus.AMOUNT_MISMATCH
     else:
         status = ReceiptStatus.MATCHED
@@ -102,10 +112,7 @@ def ingest_remittance(
     session.flush()
 
     order_id: uuid.UUID | None = None
-    if status is ReceiptStatus.MATCHED and intent is not None:
-        order = session.execute(
-            select(Order).where(Order.id == intent.order_id).with_for_update()
-        ).scalar_one()
+    if status is ReceiptStatus.MATCHED and intent is not None and order is not None:
         order_id = order.id
         assert_order_transition(OrderStatus(order.status), OrderStatus.PAID)
         previous_status = order.status
@@ -145,7 +152,7 @@ def ingest_remittance(
             payload={"order_id": str(order.id), "quantity": order.quantity},
             available_at=now,
         )
-    elif status is ReceiptStatus.AMOUNT_MISMATCH and intent is not None:
+    elif status in (ReceiptStatus.AMOUNT_MISMATCH, ReceiptStatus.ORDER_NOT_PAYABLE) and intent is not None:
         order_id = intent.order_id
         # Quarantine the funds: they are held as an unapplied liability until treasury acts.
         post_journal(
@@ -167,9 +174,11 @@ def ingest_remittance(
             dedupe_key=f"payment.mismatch:{receipt.external_reference}",
             payload={
                 "receipt_id": str(receipt.id),
+                "reason": status.value,
                 "declared_reference": advice.declared_reference,
                 "amount_minor": advice.amount_minor,
                 "expected_minor": intent.amount_minor,
+                "order_status": order.status if order is not None else None,
             },
             available_at=now,
         )

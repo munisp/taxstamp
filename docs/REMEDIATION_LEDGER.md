@@ -25,6 +25,9 @@ the flows the bundle claimed, not a patch series against it.
 | 16 | High | Nothing compiled; no tests; no CI | 104 tests across unit, integration, e2e, concurrency and fault suites, plus lint, strict typing, bandit, pip-audit in CI | `.github/workflows/ci.yml`, `scripts/run_assurance.sh` |
 | 17 | Medium | Vulnerable/unused dependencies | Removed unused PyJWT; upgraded FastAPI/Starlette/uvicorn to versions with no known advisories | `evidence/audit-deps.log` |
 | 18 | Medium | Signature covered server-normalised payloads | Signatures now cover the exact bytes the client sent | `tests/e2e/test_lifecycle.py` |
+| 19 | High | Settlement of a cancelled order raised on an illegal transition and rolled the receipt back, losing evidence of received funds | Cancellation closes open intents; settlement locks the order and records an `order_not_payable` receipt posted to `liability:unapplied_receipts` for manual application | `tests/e2e/test_payments_api.py` |
+| 20 | Medium | Reconciliation gauges kept the last non-zero value after a finding resolved | Every declared finding kind is published each run, zero included | `tests/unit/test_reconciliation_report.py` |
+| 21 | High | Requesters could read any batch by id, across tenants | Batch reads resolve the owning order's company and enforce tenant isolation | `tests/e2e/test_authorization.py` |
 
 ## Not remediated (external dependency required)
 

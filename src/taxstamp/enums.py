@@ -82,6 +82,7 @@ class ReceiptStatus(StrEnum):
     MATCHED = "matched"
     AMOUNT_MISMATCH = "amount_mismatch"
     UNKNOWN_REFERENCE = "unknown_reference"
+    ORDER_NOT_PAYABLE = "order_not_payable"
     DUPLICATE = "duplicate"
 
 
