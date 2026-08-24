@@ -31,10 +31,16 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from taxstamp.enums import (
+    AnomalyKind,
+    AnomalySeverity,
     ApprovalDecision,
     ApprovalLevel,
     BatchStatus,
+    ConsignmentStatus,
+    CustomsRegime,
     DispositionKind,
+    ExportKind,
+    FacilityKind,
     KybStatus,
     LicenceStatus,
     LicenceType,
@@ -46,6 +52,9 @@ from taxstamp.enums import (
     RiskTier,
     Role,
     StampStatus,
+    TraceEventType,
+    TradeUnitLevel,
+    TradeUnitStatus,
     VerificationOutcome,
 )
 from taxstamp.jsontypes import JsonObject
@@ -604,6 +613,323 @@ class ReceiptResolution(Base):
         CheckConstraint(
             "(kind <> 'refunded') OR (char_length(beneficiary_reference) > 0)",
             name="refund_requires_beneficiary",
+        ),
+    )
+
+
+class Facility(Base):
+    """A physical location in the supply chain, with coordinates for geometry checks."""
+
+    __tablename__ = "facilities"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    facility_code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT")
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    country: Mapped[str] = mapped_column(String(2), nullable=False)
+    state: Mapped[str] = mapped_column(String(64), nullable=False)
+    address: Mapped[str] = mapped_column(Text, nullable=False)
+    latitude_e7: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    longitude_e7: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[dt.datetime] = _created_at()
+
+    __table_args__ = (
+        _enum_check("kind", FacilityKind),
+        CheckConstraint("latitude_e7 BETWEEN -900000000 AND 900000000", name="latitude_range"),
+        CheckConstraint("longitude_e7 BETWEEN -1800000000 AND 1800000000", name="longitude_range"),
+        CheckConstraint("char_length(country) = 2", name="country_iso2"),
+        Index("ix_facilities_company", "company_id", "kind"),
+    )
+
+
+class TradeUnit(Base):
+    """An aggregation unit: a case of stamped items, a pallet of cases, a container.
+
+    ``stamp_count`` is the number of stamps the unit transitively contains. Movement
+    events are recorded against units, which is why the count has to be maintained
+    here rather than recomputed from a claim in a request body.
+    """
+
+    __tablename__ = "trade_units"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    unit_code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    level: Mapped[str] = mapped_column(String(16), nullable=False)
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
+    )
+    parent_unit_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trade_units.id", ondelete="RESTRICT")
+    )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT")
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    stamp_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    facility_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("facilities.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = _created_at()
+    closed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    __mapper_args__ = {"version_id_col": version}
+
+    __table_args__ = (
+        _enum_check("level", TradeUnitLevel),
+        _enum_check("status", TradeUnitStatus),
+        CheckConstraint("stamp_count > 0", name="stamp_count_positive"),
+        CheckConstraint("parent_unit_id IS NULL OR parent_unit_id <> id", name="parent_not_self"),
+        Index("ix_trade_units_company_status", "company_id", "status"),
+        Index("ix_trade_units_parent", "parent_unit_id"),
+    )
+
+
+class UnitMembership(Base):
+    """Which stamp sits in which case, and when it was removed.
+
+    A partial unique index enforces that a stamp is in at most one open unit, so a
+    serial cannot be aggregated into two cases at the same time.
+    """
+
+    __tablename__ = "unit_memberships"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    trade_unit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trade_units.id", ondelete="RESTRICT"), nullable=False
+    )
+    stamp_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stamps.id", ondelete="RESTRICT"), nullable=False
+    )
+    added_at: Mapped[dt.datetime] = _created_at()
+    removed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index(
+            "uq_unit_memberships_active_stamp",
+            "stamp_id",
+            unique=True,
+            postgresql_where=text("removed_at IS NULL"),
+        ),
+        Index("ix_unit_memberships_unit", "trade_unit_id"),
+    )
+
+
+class TraceEvent(Base):
+    """A recorded supply-chain movement of one trade unit.
+
+    ``observed_stamp_count`` is what the reporting party says it handled. It is stored
+    even when it disagrees with the unit's contents, because the disagreement is the
+    evidence; an anomaly is raised instead of overwriting the claim.
+    """
+
+    __tablename__ = "trace_events"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    event_ref: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    event_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    trade_unit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trade_units.id", ondelete="RESTRICT"), nullable=False
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
+    )
+    origin_facility_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("facilities.id", ondelete="RESTRICT"), nullable=False
+    )
+    destination_facility_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("facilities.id", ondelete="RESTRICT")
+    )
+    consignment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("consignments.id", ondelete="RESTRICT")
+    )
+    observed_stamp_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    transport_reference: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    occurred_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    recorded_at: Mapped[dt.datetime] = _created_at()
+    recorded_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+    context: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, default=dict)
+
+    __table_args__ = (
+        _enum_check("event_type", TraceEventType),
+        CheckConstraint("observed_stamp_count > 0", name="observed_count_positive"),
+        CheckConstraint(
+            "destination_facility_id IS NULL OR destination_facility_id <> origin_facility_id",
+            name="destination_differs",
+        ),
+        Index("ix_trace_events_unit", "trade_unit_id", "occurred_at"),
+        Index("ix_trace_events_company_occurred", "company_id", "occurred_at"),
+    )
+
+
+class Consignment(Base):
+    """An import, free-zone, transit or duty-free consignment.
+
+    The customs declaration reference is operator-entered: no customs system is
+    integrated, so the platform records the declaration and reconciles the stamped
+    quantity against it rather than claiming customs confirmation.
+    """
+
+    __tablename__ = "consignments"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    consignment_ref: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
+    )
+    regime: Mapped[str] = mapped_column(String(32), nullable=False)
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+    )
+    declared_quantity: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    customs_declaration_reference: Mapped[str] = mapped_column(String(128), nullable=False)
+    origin_country: Mapped[str] = mapped_column(String(2), nullable=False)
+    entry_facility_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("facilities.id", ondelete="RESTRICT"), nullable=False
+    )
+    order_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("orders.id", ondelete="RESTRICT"), unique=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    status_reason: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    declared_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = _created_at()
+    released_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    __mapper_args__ = {"version_id_col": version}
+
+    __table_args__ = (
+        _enum_check("regime", CustomsRegime),
+        _enum_check("status", ConsignmentStatus),
+        CheckConstraint("declared_quantity > 0", name="declared_quantity_positive"),
+        CheckConstraint("char_length(origin_country) = 2", name="origin_country_iso2"),
+        CheckConstraint(
+            "(status <> 'released') OR (released_at IS NOT NULL)", name="released_requires_timestamp"
+        ),
+        Index("ix_consignments_company_status", "company_id", "status"),
+    )
+
+
+class ConsignmentStamp(Base):
+    """The stamps that cover an import consignment's declared quantity.
+
+    A stamp may cover at most one consignment, so the same stamps cannot be presented
+    twice to release two shipments.
+    """
+
+    __tablename__ = "consignment_stamps"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    consignment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("consignments.id", ondelete="RESTRICT"), nullable=False
+    )
+    stamp_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stamps.id", ondelete="RESTRICT"), nullable=False, unique=True
+    )
+    linked_at: Mapped[dt.datetime] = _created_at()
+    linked_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+
+    __table_args__ = (Index("ix_consignment_stamps_consignment", "consignment_id"),)
+
+
+class Anomaly(Base):
+    """A deterministic finding from movement or scan geometry.
+
+    ``dedupe_key`` makes detection idempotent: re-running the sweep over the same
+    evidence never multiplies the finding.
+    """
+
+    __tablename__ = "anomalies"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    severity: Mapped[str] = mapped_column(String(8), nullable=False)
+    dedupe_key: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT")
+    )
+    stamp_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stamps.id", ondelete="RESTRICT")
+    )
+    trade_unit_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trade_units.id", ondelete="RESTRICT")
+    )
+    rule_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    explanation: Mapped[str] = mapped_column(String(500), nullable=False)
+    evidence: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, default=dict)
+    detected_at: Mapped[dt.datetime] = _created_at()
+
+    __table_args__ = (
+        _enum_check("kind", AnomalyKind),
+        _enum_check("severity", AnomalySeverity),
+        Index("ix_anomalies_kind_detected", "kind", "detected_at"),
+    )
+
+
+class TransparencyCheckpoint(Base):
+    """A published Merkle checkpoint over the audit log.
+
+    Each checkpoint commits to every audit event up to ``covers_to_seq``; the signature
+    lets a third party check a checkpoint it was handed, and an inclusion proof lets it
+    check one record without database access.
+    """
+
+    __tablename__ = "transparency_checkpoints"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    checkpoint_ref: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    tree_size: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True)
+    covers_to_seq: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    root_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    prev_root_hash: Mapped[str | None] = mapped_column(String(64))
+    signature: Mapped[str] = mapped_column(String(64), nullable=False)
+    published_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = _created_at()
+
+    __table_args__ = (CheckConstraint("tree_size > 0", name="tree_size_positive"),)
+
+
+class DataExport(Base):
+    """Evidence of a portability or regulator export: what was released, to whom, hashed."""
+
+    __tablename__ = "data_exports"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    export_ref: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT")
+    )
+    scope: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, default=dict)
+    record_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    signature: Mapped[str] = mapped_column(String(64), nullable=False)
+    requested_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = _created_at()
+
+    __table_args__ = (
+        _enum_check("kind", ExportKind),
+        CheckConstraint("record_count >= 0", name="record_count_non_negative"),
+        CheckConstraint(
+            "(kind <> 'portability') OR (company_id IS NOT NULL)", name="portability_requires_company"
         ),
     )
 

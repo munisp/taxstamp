@@ -9,6 +9,10 @@ from taxstamp.audit import AuditActor
 from taxstamp.enums import Role
 from taxstamp.errors import Forbidden
 
+#: Roles that supervise the register and the supply chain as a whole, and therefore read
+#: across tenants. Every other role sees only its own company's records.
+CROSS_TENANT_READERS: frozenset[Role] = frozenset({Role.ANALYST, Role.SUPERVISOR, Role.ADMIN})
+
 
 @dataclass(frozen=True, slots=True)
 class Actor:

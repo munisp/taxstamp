@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     device_hmac_secret: str
     payment_webhook_secret: str
     audit_chain_secret: str
+    export_signing_secret: str
+    transparency_signing_secret: str
 
     require_tls: bool = True
     cors_allowed_origins: str = ""
@@ -82,6 +84,9 @@ class Settings(BaseSettings):
     son_base_url: str = ""
     customs_base_url: str = ""
     ledger_anchor_base_url: str = ""
+    #: Where a regulator export is delivered. Empty means no delivery channel exists, and
+    #: the platform then reports the export as undelivered rather than claiming a filing.
+    regulator_repository_base_url: str = ""
     external_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
     external_api_key: str = ""
 
@@ -90,6 +95,8 @@ class Settings(BaseSettings):
         "device_hmac_secret",
         "payment_webhook_secret",
         "audit_chain_secret",
+        "export_signing_secret",
+        "transparency_signing_secret",
     )
     @classmethod
     def _validate_secret(cls, value: str) -> str:
@@ -119,6 +126,8 @@ class Settings(BaseSettings):
                 "device_hmac_secret": self.device_hmac_secret,
                 "payment_webhook_secret": self.payment_webhook_secret,
                 "audit_chain_secret": self.audit_chain_secret,
+                "export_signing_secret": self.export_signing_secret,
+                "transparency_signing_secret": self.transparency_signing_secret,
             }
             for name, value in secrets.items():
                 if _PLACEHOLDER.search(value):

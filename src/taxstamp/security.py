@@ -59,6 +59,25 @@ def secure_codes_match(candidate: str, stored: str) -> bool:
     return hmac.compare_digest(candidate, stored)
 
 
+def document_hash(document: JsonObject) -> str:
+    """Content hash of a canonicalised document, for export and checkpoint evidence."""
+    return sha256(canonical_bytes(document)).hexdigest()
+
+
+def sign_document(document: JsonObject, *, secret: str, purpose: str) -> str:
+    """Sign a released document under a purpose-separated key.
+
+    The purpose string keeps an export signature from being valid as a checkpoint
+    signature, or as a request signature, even though one secret backs all of them.
+    """
+    key = hmac.new(secret.encode("utf-8"), f"purpose:{purpose}".encode(), sha256).digest()
+    return hmac.new(key, canonical_bytes(document), sha256).hexdigest()
+
+
+def document_signature_matches(candidate: str, expected: str) -> bool:
+    return hmac.compare_digest(candidate, expected)
+
+
 class SignatureError(ValueError):
     pass
 

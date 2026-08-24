@@ -16,6 +16,8 @@ BASE = {
     "device_hmac_secret": "b" * 48,
     "payment_webhook_secret": "c" * 48,
     "audit_chain_secret": "d" * 48,
+    "export_signing_secret": "e" * 48,
+    "transparency_signing_secret": "f" * 48,
 }
 
 
@@ -37,7 +39,14 @@ def test_production_rejects_placeholder_secrets() -> None:
 def test_production_rejects_duplicate_secrets() -> None:
     duplicate = {
         key: "e" * 48
-        for key in ("api_token_secret", "device_hmac_secret", "payment_webhook_secret", "audit_chain_secret")
+        for key in (
+            "api_token_secret",
+            "device_hmac_secret",
+            "payment_webhook_secret",
+            "audit_chain_secret",
+            "export_signing_secret",
+            "transparency_signing_secret",
+        )
     }
     with pytest.raises(ValidationError):
         Settings(**{**BASE, **duplicate, "env": Environment.PRODUCTION})

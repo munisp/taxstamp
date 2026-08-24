@@ -8,25 +8,12 @@ service is configured, submitted for external notarisation. Nothing claims to be
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha256
 
 from taxstamp.jsontypes import require_str
+from taxstamp.merkle import merkle_root
 from taxstamp.providers.base import ProviderClient
 
-
-def merkle_root(leaves: list[str]) -> str:
-    """RFC 6962-style Merkle root with domain separation between leaf and node hashes."""
-    if not leaves:
-        raise ValueError("merkle root requires at least one leaf")
-    level = [sha256(b"\x00" + leaf.encode("utf-8")).digest() for leaf in leaves]
-    while len(level) > 1:
-        nxt: list[bytes] = []
-        for index in range(0, len(level) - 1, 2):
-            nxt.append(sha256(b"\x01" + level[index] + level[index + 1]).digest())
-        if len(level) % 2 == 1:
-            nxt.append(level[-1])
-        level = nxt
-    return level[0].hex()
+__all__ = ["AnchorReceipt", "AnchorService", "merkle_root"]
 
 
 @dataclass(frozen=True, slots=True)
