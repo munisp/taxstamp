@@ -70,21 +70,22 @@ def handle_anchor_batch(runtime: Runtime, session: Session, payload: JsonObject)
     return {"external_reference": receipt.external_reference}
 
 
-def handle_notify(runtime: Runtime, session: Session, payload: JsonObject) -> JsonObject:
-    """Record an operational notification in the audit trail.
-
-    Delivery to an external channel is not implemented; the event is retained durably so
-    that no notification is silently dropped.
-    """
+def _record(
+    runtime: Runtime,
+    session: Session,
+    *,
+    action: str,
+    target_type: str,
+    target_id: str,
+    payload: JsonObject,
+) -> JsonObject:
     record_audit_event(
         session,
         actor=SYSTEM_ACTOR,
         record=AuditRecord(
-            action="notification.recorded",
-            target_type="notification",
-            target_id=require_str(payload, "order_id")
-            if "order_id" in payload
-            else require_str(payload, "receipt_id"),
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
             outcome="success",
             after_state=payload,
         ),
@@ -93,6 +94,68 @@ def handle_notify(runtime: Runtime, session: Session, payload: JsonObject) -> Js
         revision=runtime.settings.revision,
     )
     return {"recorded": True}
+
+
+def handle_notify(runtime: Runtime, session: Session, payload: JsonObject) -> JsonObject:
+    """Record an operational notification in the audit trail.
+
+    Delivery to an external channel is not implemented; the event is retained durably so
+    that no notification is silently dropped.
+    """
+    return _record(
+        runtime,
+        session,
+        action="notification.recorded",
+        target_type="notification",
+        target_id=require_str(payload, "order_id")
+        if "order_id" in payload
+        else require_str(payload, "receipt_id"),
+        payload=payload,
+    )
+
+
+def handle_trace_event(runtime: Runtime, session: Session, payload: JsonObject) -> JsonObject:
+    """Retain a recorded movement for onward reporting.
+
+    No regulator repository is integrated, so the movement is retained in the audit trail
+    rather than claimed as filed.
+    """
+    return _record(
+        runtime,
+        session,
+        action="trace.event_relayed",
+        target_type="trace_event",
+        target_id=require_str(payload, "event_ref"),
+        payload=payload,
+    )
+
+
+def handle_consignment_released(runtime: Runtime, session: Session, payload: JsonObject) -> JsonObject:
+    """Retain a customs release decision for onward reporting."""
+    return _record(
+        runtime,
+        session,
+        action="consignment.release_relayed",
+        target_type="consignment",
+        target_id=require_str(payload, "consignment_ref"),
+        payload=payload,
+    )
+
+
+def handle_refund_authorised(runtime: Runtime, session: Session, payload: JsonObject) -> JsonObject:
+    """Retain an authorised refund for treasury to pay out.
+
+    No payout channel is integrated, so this records the authorisation; it does not claim
+    that money left the account.
+    """
+    return _record(
+        runtime,
+        session,
+        action="payment.refund_authorisation_recorded",
+        target_type="payment_receipt",
+        target_id=require_str(payload, "receipt_id"),
+        payload=payload,
+    )
 
 
 def handle_mismatch_review(runtime: Runtime, session: Session, payload: JsonObject) -> JsonObject:
@@ -114,6 +177,9 @@ HANDLERS: dict[str, Handler] = {
     "batch.anchor_requested": handle_anchor_batch,
     "order.awaiting_payment": handle_notify,
     "payment.mismatch_requires_review": handle_mismatch_review,
+    "payment.refund_authorised": handle_refund_authorised,
+    "trace.event_recorded": handle_trace_event,
+    "consignment.released": handle_consignment_released,
 }
 
 

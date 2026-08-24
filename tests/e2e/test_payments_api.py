@@ -72,6 +72,32 @@ def test_tampered_amount_invalidates_the_signature(
     assert response.status_code == 401
 
 
+def test_float_amount_is_rejected_without_a_server_error(
+    client: TestClient, settings: Settings, clock: FixedClock, awaiting_payment: dict[str, object]
+) -> None:
+    payment = awaiting_payment["payment"]
+    assert isinstance(payment, dict)
+    amount_minor = payment["amount_minor"]
+    assert isinstance(amount_minor, int)
+    body = {
+        "external_reference": "BANK-FLOAT",
+        "payment_reference": payment["reference"],
+        "amount_minor": float(amount_minor),
+        "currency": "NGN",
+        "value_date": clock.now().isoformat(),
+    }
+    response = client.post(
+        "/v1/payments/remittances",
+        content=json.dumps(body),
+        headers=signed_headers(
+            {**body, "amount_minor": amount_minor},
+            secret=settings.payment_webhook_secret,
+            now=clock.now(),
+        ),
+    )
+    assert response.status_code == 401
+
+
 def test_underpayment_is_quarantined_and_order_stays_unpaid(
     client: TestClient,
     settings: Settings,

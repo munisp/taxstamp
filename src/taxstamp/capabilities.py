@@ -67,8 +67,40 @@ _STATIC: tuple[Capability, ...] = (
     ),
     Capability(
         "offline_verification_sync",
+        CapabilityState.IMPLEMENTED,
+        "Signed, sequenced revocation bundles for disconnected devices, and replay-protected "
+        "batch synchronisation in which every captured scan is re-decided server-side; a "
+        "bundle proves only that a serial is not revoked, never that it is genuine",
+    ),
+    Capability(
+        "consumer_verification",
+        CapabilityState.IMPLEMENTED,
+        "Unauthenticated public stamp check, rate limited per caller address, disclosing "
+        "only product identity and authenticity",
+    ),
+    Capability(
+        "enforcement_case_management",
+        CapabilityState.IMPLEMENTED,
+        "Cases, evidence, seizures and hash-chained chain of custody, with closure reserved "
+        "to a supervisor other than the officer who opened the case",
+    ),
+    Capability(
+        "risk_scoring",
+        CapabilityState.IMPLEMENTED,
+        "Deterministic weighted counts of stored evidence with a per-factor explanation and "
+        "a recorded model version; no learned or statistical model",
+    ),
+    Capability(
+        "programme_reporting",
+        CapabilityState.IMPLEMENTED,
+        "KPI counters and itemised revenue-at-risk exposure over an explicit window; "
+        "exposure is not an assessed liability and contains no extrapolation",
+    ),
+    Capability(
+        "prosecution_case_filing",
         CapabilityState.NOT_IMPLEMENTED,
-        "Offline capture and reconciliation of field verifications is not implemented",
+        "No court or prosecution system is integrated; referral records the platform "
+        "holder's decision and never claims an external filing was accepted",
     ),
 )
 

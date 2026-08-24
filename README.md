@@ -21,6 +21,16 @@ quantity. Contradictions between records surface as deterministic findings
 exports (`/v1/exports/regulator`, `/v1/exports/portability`) under a published retention
 policy (`GET /v1/retention-policy`).
 
+Downstream of issuance, the public checks a stamp at `POST /v1/public/verify` — unauthenticated,
+rate limited, and returning only the outcome, brand, category and intended market. Officers
+work findings as cases (`POST /v1/cases`), take goods into custody with a hash-chained
+handover log (`POST /v1/cases/{ref}/seizures`, `POST /v1/seizures/{ref}/custody`), and
+supervisors read the programme at `GET /v1/reports/kpis`,
+`GET /v1/reports/revenue-at-risk` and `GET /v1/reports/risk/{company_id}`. Inspectors
+without connectivity carry a signed revocation bundle (`GET /v1/offline/bundles/latest`)
+and hand their scans back at `POST /v1/offline/scans`, where every scan is decided again
+server-side.
+
 ## What is real and what is not
 
 Every externally dependent flow is declared in `GET /v1/capabilities` and in
@@ -29,6 +39,13 @@ similar integrations call a configured external service over HTTP; when an integ
 not configured or is unreachable, the request is **rejected** (HTTP 503) rather than
 silently treated as a success. There are no simulated approvals, no default-authentic
 verification and no hardcoded confidence scores.
+
+Three limits are worth stating plainly. An offline bundle answers one-sidedly: a hit means
+"possibly revoked", while a miss proves only that the mark is not on that revocation list —
+never that it is genuine. Revenue at risk reports observed exposure from stored records,
+itemised by source and not extrapolated to unobserved trade, so it is not an assessed
+liability. A prosecution referral is an internal record only; nothing is filed with any
+court or prosecuting authority.
 
 The release decision for this revision is recorded in
 [docs/ASSURANCE_REPORT.md](docs/ASSURANCE_REPORT.md). It is **BLOCKED** for production:

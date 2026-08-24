@@ -36,9 +36,12 @@ from taxstamp.enums import (
     ApprovalDecision,
     ApprovalLevel,
     BatchStatus,
+    CaseKind,
+    CaseStatus,
     ConsignmentStatus,
     CustomsRegime,
     DispositionKind,
+    EvidenceKind,
     ExportKind,
     FacilityKind,
     KybStatus,
@@ -51,10 +54,12 @@ from taxstamp.enums import (
     ResolutionKind,
     RiskTier,
     Role,
+    SeizureStatus,
     StampStatus,
     TraceEventType,
     TradeUnitLevel,
     TradeUnitStatus,
+    VerificationChannel,
     VerificationOutcome,
 )
 from taxstamp.jsontypes import JsonObject
@@ -950,14 +955,266 @@ class Verification(Base):
     )
     device_id: Mapped[str] = mapped_column(String(64), nullable=False)
     nonce: Mapped[str] = mapped_column(String(64), nullable=False)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False, default=VerificationChannel.FIELD_DEVICE)
     latitude_e7: Mapped[int | None] = mapped_column(BigInteger)
     longitude_e7: Mapped[int | None] = mapped_column(BigInteger)
     occurred_at: Mapped[dt.datetime] = _created_at()
 
     __table_args__ = (
         _enum_check("outcome", VerificationOutcome),
+        _enum_check("channel", VerificationChannel),
         Index("ix_verifications_serial", "serial_presented", "occurred_at"),
         Index("ix_verifications_stamp", "stamp_id", "occurred_at"),
+    )
+
+
+class ConsumerVerification(Base):
+    """A verification performed by a member of the public, with no account.
+
+    No consumer identity is stored. ``client_fingerprint`` is a keyed hash of the caller
+    address, which supports abuse control and clone detection without retaining an
+    identifier that could be reversed to a person.
+    """
+
+    __tablename__ = "consumer_verifications"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    stamp_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stamps.id", ondelete="RESTRICT")
+    )
+    serial_presented: Mapped[str] = mapped_column(String(64), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False)
+    client_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    reported_state: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    occurred_at: Mapped[dt.datetime] = _created_at()
+
+    __table_args__ = (
+        _enum_check("outcome", VerificationOutcome),
+        Index("ix_consumer_verifications_serial", "serial_presented", "occurred_at"),
+        Index("ix_consumer_verifications_client", "client_fingerprint", "occurred_at"),
+    )
+
+
+class EnforcementCase(Base):
+    """An investigation into suspected illicit trade.
+
+    A case is opened from evidence the platform already holds; the estimated revenue at
+    risk is recomputed from that evidence rather than entered by hand, so a case cannot
+    assert a loss the records do not support.
+    """
+
+    __tablename__ = "enforcement_cases"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    case_ref: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    severity: Mapped[str] = mapped_column(String(8), nullable=False)
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT")
+    )
+    product_category: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    summary: Mapped[str] = mapped_column(String(500), nullable=False)
+    revenue_at_risk_minor: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="NGN")
+    opened_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = _created_at()
+    closed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    closure_reason: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    __mapper_args__ = {"version_id_col": version}
+
+    __table_args__ = (
+        _enum_check("kind", CaseKind),
+        _enum_check("status", CaseStatus),
+        _enum_check("severity", AnomalySeverity),
+        CheckConstraint("revenue_at_risk_minor >= 0", name="revenue_at_risk_non_negative"),
+        CheckConstraint(
+            "(status NOT IN ('closed_substantiated', 'closed_unsubstantiated')) "
+            "OR (closed_at IS NOT NULL AND char_length(closure_reason) > 0)",
+            name="closure_requires_reason",
+        ),
+        Index("ix_enforcement_cases_status", "status", "created_at"),
+        Index("ix_enforcement_cases_company", "company_id", "status"),
+    )
+
+
+class CaseEvidence(Base):
+    """An item of evidence attached to a case. Append-only: evidence is never edited."""
+
+    __tablename__ = "case_evidence"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("enforcement_cases.id", ondelete="RESTRICT"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    reference: Mapped[str] = mapped_column(String(128), nullable=False)
+    detail: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, default=dict)
+    added_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = _created_at()
+
+    __table_args__ = (
+        _enum_check("kind", EvidenceKind),
+        UniqueConstraint("case_id", "kind", "reference", name="uq_case_evidence_case_id_kind_reference"),
+    )
+
+
+class Seizure(Base):
+    """Goods taken into custody under a case.
+
+    ``estimated_duty_minor`` is the duty the seized quantity would have carried at the
+    tariff effective when the seizure was recorded, so the figure is reproducible.
+    """
+
+    __tablename__ = "seizures"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    seizure_ref: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("enforcement_cases.id", ondelete="RESTRICT"), nullable=False
+    )
+    facility_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("facilities.id", ondelete="RESTRICT")
+    )
+    location: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    product_category: Mapped[str] = mapped_column(String(64), nullable=False)
+    seized_quantity: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    estimated_duty_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="NGN")
+    tariff_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tariffs.id", ondelete="RESTRICT")
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    status_reason: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    seized_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    recorded_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = _created_at()
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    __mapper_args__ = {"version_id_col": version}
+
+    __table_args__ = (
+        _enum_check("status", SeizureStatus),
+        CheckConstraint("seized_quantity > 0", name="seized_quantity_positive"),
+        CheckConstraint("estimated_duty_minor >= 0", name="estimated_duty_non_negative"),
+        Index("ix_seizures_case", "case_id", "created_at"),
+    )
+
+
+class CustodyTransfer(Base):
+    """One link in a seizure's chain of custody.
+
+    Links are numbered per seizure and hash-chained, so a removed or reordered handover
+    is detectable: the chain is the admissibility evidence, not a convenience log.
+    """
+
+    __tablename__ = "custody_transfers"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    seizure_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("seizures.id", ondelete="RESTRICT"), nullable=False
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    from_custodian: Mapped[str] = mapped_column(String(255), nullable=False)
+    to_custodian: Mapped[str] = mapped_column(String(255), nullable=False)
+    location: Mapped[str] = mapped_column(String(255), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    evidence_reference: Mapped[str] = mapped_column(String(128), nullable=False)
+    occurred_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    recorded_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+    prev_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[dt.datetime] = _created_at()
+
+    __table_args__ = (
+        CheckConstraint("sequence >= 1", name="sequence_positive"),
+        CheckConstraint("from_custodian <> to_custodian", name="custodians_differ"),
+        UniqueConstraint("seizure_id", "sequence", name="uq_custody_transfers_seizure_id_sequence"),
+    )
+
+
+class OfflineBundle(Base):
+    """A signed, offline-verifiable snapshot of the revoked-serial filter.
+
+    A device with no connectivity checks a serial against the filter and the signature;
+    ``valid_until`` bounds how stale that answer may be, so an offline device cannot keep
+    trusting an indefinitely old revocation list.
+    """
+
+    __tablename__ = "offline_bundles"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    bundle_ref: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True)
+    revoked_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    filter_bits: Mapped[int] = mapped_column(Integer, nullable=False)
+    filter_hash_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    filter_base64: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    signature: Mapped[str] = mapped_column(String(64), nullable=False)
+    generated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    valid_until: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[dt.datetime] = _created_at()
+
+    __table_args__ = (
+        CheckConstraint("sequence >= 1", name="sequence_positive"),
+        CheckConstraint("revoked_count >= 0", name="revoked_count_non_negative"),
+        CheckConstraint("filter_bits > 0", name="filter_bits_positive"),
+        CheckConstraint("filter_hash_count > 0", name="filter_hash_count_positive"),
+        CheckConstraint("valid_until > generated_at", name="validity_range"),
+    )
+
+
+class OfflineScanBatch(Base):
+    """A batch of verifications a device captured while offline.
+
+    ``(device_id, batch_sequence)`` is unique, so a replayed batch cannot be counted
+    twice; a resubmission of the same sequence with different contents is a conflict
+    rather than an overwrite.
+    """
+
+    __tablename__ = "offline_scan_batches"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    device_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    batch_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    principal_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False
+    )
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    scan_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    accepted_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    duplicate_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    captured_from: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    captured_to: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[dt.datetime] = _created_at()
+
+    __table_args__ = (
+        CheckConstraint("batch_sequence >= 1", name="batch_sequence_positive"),
+        CheckConstraint("scan_count > 0", name="scan_count_positive"),
+        CheckConstraint(
+            "accepted_count >= 0 AND duplicate_count >= 0 "
+            "AND accepted_count + duplicate_count = scan_count",
+            name="counts_reconcile",
+        ),
+        CheckConstraint("captured_to >= captured_from", name="capture_window"),
+        UniqueConstraint(
+            "device_id", "batch_sequence", name="uq_offline_scan_batches_device_id_batch_sequence"
+        ),
     )
 
 

@@ -15,7 +15,7 @@ from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 
 from taxstamp.api.deps import CurrentActor, RuntimeDep, rate_limit, utc
-from taxstamp.api.schemas import VerifyRequest
+from taxstamp.api.schemas import VerifyRequest, parse_signed_body
 from taxstamp.db import transaction
 from taxstamp.enums import Role
 from taxstamp.errors import Unauthenticated, ValidationFailed
@@ -67,7 +67,7 @@ async def verify(
         logger.info("verify_signature_rejected", reason=str(exc))
         raise Unauthenticated("request signature is invalid or stale") from exc
 
-    body = VerifyRequest.model_validate(document)
+    body = parse_signed_body(VerifyRequest, document)
 
     if not runtime.replay_guard.claim(body.device_id, body.nonce):
         raise Unauthenticated("nonce has already been used")

@@ -18,6 +18,9 @@ BASE = {
     "audit_chain_secret": "d" * 48,
     "export_signing_secret": "e" * 48,
     "transparency_signing_secret": "f" * 48,
+    "offline_signing_secret": "g" * 48,
+    "offline_filter_secret": "i" * 48,
+    "consumer_fingerprint_secret": "h" * 48,
 }
 
 
@@ -46,6 +49,9 @@ def test_production_rejects_duplicate_secrets() -> None:
             "audit_chain_secret",
             "export_signing_secret",
             "transparency_signing_secret",
+            "offline_signing_secret",
+            "offline_filter_secret",
+            "consumer_fingerprint_secret",
         )
     }
     with pytest.raises(ValidationError):

@@ -297,6 +297,87 @@ REQUIRED_APPROVALS: dict[RiskTier, tuple[ApprovalLevel, ...]] = {
 }
 
 
+class CaseKind(StrEnum):
+    """What an enforcement case alleges."""
+
+    COUNTERFEIT = "counterfeit"
+    DIVERSION = "diversion"
+    UNSTAMPED_GOODS = "unstamped_goods"
+    QUANTITY_DISCREPANCY = "quantity_discrepancy"
+    LICENSING_BREACH = "licensing_breach"
+
+
+class CaseStatus(StrEnum):
+    OPEN = "open"
+    UNDER_INVESTIGATION = "under_investigation"
+    REFERRED_FOR_PROSECUTION = "referred_for_prosecution"
+    CLOSED_SUBSTANTIATED = "closed_substantiated"
+    CLOSED_UNSUBSTANTIATED = "closed_unsubstantiated"
+
+
+#: Terminal case states. A closed case is evidence and is never reopened in place; a new
+#: case referencing it is opened instead, so the record of the first decision survives.
+CLOSED_CASE_STATUSES: frozenset[CaseStatus] = frozenset(
+    {CaseStatus.CLOSED_SUBSTANTIATED, CaseStatus.CLOSED_UNSUBSTANTIATED}
+)
+
+CASE_TRANSITIONS: dict[CaseStatus, frozenset[CaseStatus]] = {
+    CaseStatus.OPEN: frozenset(
+        {
+            CaseStatus.UNDER_INVESTIGATION,
+            CaseStatus.CLOSED_SUBSTANTIATED,
+            CaseStatus.CLOSED_UNSUBSTANTIATED,
+        }
+    ),
+    CaseStatus.UNDER_INVESTIGATION: frozenset(
+        {
+            CaseStatus.REFERRED_FOR_PROSECUTION,
+            CaseStatus.CLOSED_SUBSTANTIATED,
+            CaseStatus.CLOSED_UNSUBSTANTIATED,
+        }
+    ),
+    CaseStatus.REFERRED_FOR_PROSECUTION: frozenset(
+        {CaseStatus.CLOSED_SUBSTANTIATED, CaseStatus.CLOSED_UNSUBSTANTIATED}
+    ),
+    CaseStatus.CLOSED_SUBSTANTIATED: frozenset(set()),
+    CaseStatus.CLOSED_UNSUBSTANTIATED: frozenset(set()),
+}
+
+
+class EvidenceKind(StrEnum):
+    """The record type an item of case evidence points at."""
+
+    ANOMALY = "anomaly"
+    VERIFICATION = "verification"
+    CONSIGNMENT = "consignment"
+    STAMP = "stamp"
+    TRACE_EVENT = "trace_event"
+    STATEMENT = "statement"
+
+
+class SeizureStatus(StrEnum):
+    HELD = "held"
+    RELEASED = "released"
+    DESTROYED = "destroyed"
+    FORFEITED = "forfeited"
+
+
+SEIZURE_TRANSITIONS: dict[SeizureStatus, frozenset[SeizureStatus]] = {
+    SeizureStatus.HELD: frozenset({SeizureStatus.RELEASED, SeizureStatus.DESTROYED, SeizureStatus.FORFEITED}),
+    SeizureStatus.RELEASED: frozenset(set()),
+    SeizureStatus.DESTROYED: frozenset(set()),
+    SeizureStatus.FORFEITED: frozenset({SeizureStatus.DESTROYED}),
+}
+
+
+class VerificationChannel(StrEnum):
+    """Who performed a verification, which decides how much may be disclosed back."""
+
+    FIELD_DEVICE = "field_device"
+    CONSUMER = "consumer"
+    OFFLINE_DEVICE = "offline_device"
+
+
 class VerificationOutcome(StrEnum):
     VALID = "valid"
     UNKNOWN_SERIAL = "unknown_serial"
@@ -351,3 +432,13 @@ def assert_trade_unit_transition(current: TradeUnitStatus, target: TradeUnitStat
 def assert_consignment_transition(current: ConsignmentStatus, target: ConsignmentStatus) -> None:
     if target not in CONSIGNMENT_TRANSITIONS.get(current, frozenset()):
         raise TransitionError(f"consignment: illegal transition {current.value} -> {target.value}")
+
+
+def assert_case_transition(current: CaseStatus, target: CaseStatus) -> None:
+    if target not in CASE_TRANSITIONS.get(current, frozenset()):
+        raise TransitionError(f"case: illegal transition {current.value} -> {target.value}")
+
+
+def assert_seizure_transition(current: SeizureStatus, target: SeizureStatus) -> None:
+    if target not in SEIZURE_TRANSITIONS.get(current, frozenset()):
+        raise TransitionError(f"seizure: illegal transition {current.value} -> {target.value}")

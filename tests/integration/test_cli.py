@@ -32,6 +32,9 @@ def _env(settings: Settings) -> dict[str, str]:
         "TAXSTAMP_AUDIT_CHAIN_SECRET": settings.audit_chain_secret,
         "TAXSTAMP_EXPORT_SIGNING_SECRET": settings.export_signing_secret,
         "TAXSTAMP_TRANSPARENCY_SIGNING_SECRET": settings.transparency_signing_secret,
+        "TAXSTAMP_OFFLINE_SIGNING_SECRET": settings.offline_signing_secret,
+        "TAXSTAMP_OFFLINE_FILTER_SECRET": settings.offline_filter_secret,
+        "TAXSTAMP_CONSUMER_FINGERPRINT_SECRET": settings.consumer_fingerprint_secret,
         "TAXSTAMP_REQUIRE_TLS": "false",
         "PYTHONPATH": str(REPO_ROOT / "src"),
     }

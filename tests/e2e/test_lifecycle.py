@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -165,6 +166,53 @@ def test_replayed_verification_nonce_is_rejected(
     second = client.post("/v1/verify", json=body, headers=headers)
     assert first.status_code in (200, 422)
     assert second.status_code == 401
+
+
+def test_a_signed_verification_with_an_unknown_field_is_a_validation_failure(
+    client: TestClient, settings: Settings, clock: FixedClock, tenant: Tenant
+) -> None:
+    """A signed body is validated after the signature check, so it must not surface a 500."""
+    body = {
+        "serial": "NG-ALC-2026-000001-X",
+        "secure_code": "ABCDEFGHJKLM",
+        "device_id": "field-device-3",
+        "nonce": "unknown-field-nonce",
+        "operator_note": "not part of the schema",
+    }
+    response = client.post(
+        "/v1/verify",
+        json=body,
+        headers={
+            **auth(tenant.device.token),
+            **signed_headers(body, secret=settings.device_hmac_secret, now=clock.now()),
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "validation_failed"
+
+
+def test_a_verification_body_containing_a_float_is_unauthenticated(
+    client: TestClient, settings: Settings, clock: FixedClock, tenant: Tenant
+) -> None:
+    """A body that cannot be canonicalised can never bear a valid signature."""
+    body = {
+        "serial": "NG-ALC-2026-000001-X",
+        "secure_code": "ABCDEFGHJKLM",
+        "device_id": "field-device-4",
+        "nonce": "float-nonce",
+        "latitude_e7": 6.5,
+    }
+    response = client.post(
+        "/v1/verify",
+        content=json.dumps(body),
+        headers={
+            **auth(tenant.device.token),
+            **signed_headers(
+                {**body, "latitude_e7": 65_000_000}, secret=settings.device_hmac_secret, now=clock.now()
+            ),
+        },
+    )
+    assert response.status_code == 401, response.text
 
 
 def test_expiry_job_expires_stamps_after_validity(

@@ -39,6 +39,9 @@ services:
       TAXSTAMP_AUDIT_CHAIN_SECRET: development-audit-chain-secret-value-not-for-any-real-use
       TAXSTAMP_EXPORT_SIGNING_SECRET: development-export-signing-secret-value-not-for-real-use
       TAXSTAMP_TRANSPARENCY_SIGNING_SECRET: development-transparency-signing-value-not-for-real
+      TAXSTAMP_OFFLINE_SIGNING_SECRET: development-offline-signing-secret-value-not-for-real-use
+      TAXSTAMP_OFFLINE_FILTER_SECRET: development-offline-filter-secret-value-not-for-real-use
+      TAXSTAMP_CONSUMER_FINGERPRINT_SECRET: development-consumer-fingerprint-value-not-for-real
       TAXSTAMP_REQUIRE_TLS: "false"
     depends_on:
       postgres: {condition: service_healthy}

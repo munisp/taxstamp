@@ -14,7 +14,7 @@ from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 
 from taxstamp.api.deps import RuntimeDep
-from taxstamp.api.schemas import RemittanceRequest
+from taxstamp.api.schemas import RemittanceRequest, parse_signed_body
 from taxstamp.canonical import sha256_hex
 from taxstamp.db import transaction
 from taxstamp.errors import Unauthenticated, ValidationFailed
@@ -60,7 +60,7 @@ async def ingest_remittance(
         logger.warning("remittance_signature_rejected", reason=str(exc))
         raise Unauthenticated("remittance signature is invalid") from exc
 
-    advice_model = RemittanceRequest.model_validate(body)
+    advice_model = parse_signed_body(RemittanceRequest, body)
     if not runtime.replay_guard.claim("payments", sha256_hex(raw)):
         return JSONResponse(
             status_code=202,
