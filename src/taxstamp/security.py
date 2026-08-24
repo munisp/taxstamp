@@ -12,7 +12,7 @@ import secrets
 from dataclasses import dataclass
 from hashlib import sha256
 
-from taxstamp.canonical import canonical_bytes
+from taxstamp.canonical import CanonicalisationError, canonical_bytes
 from taxstamp.clock import ensure_utc
 from taxstamp.jsontypes import JsonObject
 
@@ -87,7 +87,10 @@ def verify_signed_request(
     max_skew_seconds: int,
 ) -> None:
     """Verify signature then freshness. Raises ``SignatureError`` on any failure."""
-    expected = sign_request(request.body, request.timestamp, secret=secret)
+    try:
+        expected = sign_request(request.body, request.timestamp, secret=secret)
+    except CanonicalisationError as exc:
+        raise SignatureError(f"body is not signable: {exc}") from exc
     if not hmac.compare_digest(expected, request.signature):
         raise SignatureError("signature mismatch")
     skew = abs((ensure_utc(now) - ensure_utc(request.timestamp)).total_seconds())

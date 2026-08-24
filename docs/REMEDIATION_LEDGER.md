@@ -28,6 +28,8 @@ the flows the bundle claimed, not a patch series against it.
 | 19 | High | Settlement of a cancelled order raised on an illegal transition and rolled the receipt back, losing evidence of received funds | Cancellation closes open intents; settlement locks the order and records an `order_not_payable` receipt posted to `liability:unapplied_receipts` for manual application | `tests/e2e/test_payments_api.py` |
 | 20 | Medium | Reconciliation gauges kept the last non-zero value after a finding resolved | Every declared finding kind is published each run, zero included | `tests/unit/test_reconciliation_report.py` |
 | 21 | High | Requesters could read any batch by id, across tenants | Batch reads resolve the owning order's company and enforce tenant isolation | `tests/e2e/test_authorization.py` |
+| 22 | High | Cancellation and settlement locked the order and its payment intent in opposite orders, risking a database deadlock | Both paths lock the order before the intent; an uncancellable order returns a domain conflict instead of a server error | `tests/concurrency/test_concurrent_operations.py` |
+| 23 | Medium | A signed body containing a float could not be canonicalised, so signature verification raised and returned a server error | A body that cannot be canonicalised can never bear a valid signature, so verification rejects it as unauthenticated | `tests/unit/test_security.py`, `tests/e2e/test_payments_api.py` |
 
 ## Not remediated (external dependency required)
 
