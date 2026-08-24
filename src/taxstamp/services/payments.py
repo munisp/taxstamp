@@ -72,14 +72,22 @@ def ingest_remittance(
             duplicate=True,
         )
 
-    intent = session.execute(
-        select(PaymentIntent).where(PaymentIntent.reference == advice.declared_reference).with_for_update()
+    # The order row is locked before its intents, matching cancel_order: any other
+    # acquisition sequence lets a concurrent cancellation and settlement deadlock.
+    intent_order_id = session.execute(
+        select(PaymentIntent.order_id).where(PaymentIntent.reference == advice.declared_reference)
     ).scalar_one_or_none()
 
+    intent: PaymentIntent | None = None
     order: Order | None = None
-    if intent is not None:
+    if intent_order_id is not None:
         order = session.execute(
-            select(Order).where(Order.id == intent.order_id).with_for_update()
+            select(Order).where(Order.id == intent_order_id).with_for_update()
+        ).scalar_one()
+        intent = session.execute(
+            select(PaymentIntent)
+            .where(PaymentIntent.reference == advice.declared_reference)
+            .with_for_update()
         ).scalar_one()
 
     if intent is None:
