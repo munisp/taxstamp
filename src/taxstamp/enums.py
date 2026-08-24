@@ -86,6 +86,44 @@ class ReceiptStatus(StrEnum):
     DUPLICATE = "duplicate"
 
 
+class LicenceType(StrEnum):
+    MANUFACTURER = "manufacturer"
+    IMPORTER = "importer"
+    DISTRIBUTOR = "distributor"
+
+
+#: Licence types entitled to order stamps. A distributor moves stamped goods but does
+#: not apply stamps, so it cannot procure them.
+ORDERING_LICENCE_TYPES: frozenset[LicenceType] = frozenset({LicenceType.MANUFACTURER, LicenceType.IMPORTER})
+
+
+class LicenceStatus(StrEnum):
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+    REVOKED = "revoked"
+
+
+class ProductStatus(StrEnum):
+    ACTIVE = "active"
+    WITHDRAWN = "withdrawn"
+
+
+class DispositionKind(StrEnum):
+    """Why stamps left the usable population without being applied to goods."""
+
+    SPOILED = "spoiled"
+    DAMAGED = "damaged"
+    DESTROYED = "destroyed"
+    RETURNED = "returned"
+
+
+class ResolutionKind(StrEnum):
+    """How a quarantined receipt left the unapplied-receipts account."""
+
+    APPLIED = "applied"
+    REFUNDED = "refunded"
+
+
 class ApprovalLevel(StrEnum):
     ANALYST = "analyst"
     SUPERVISOR = "supervisor"

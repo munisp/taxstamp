@@ -34,6 +34,7 @@ from taxstamp.models import Approval, Company, Order, OrderTransition, PaymentIn
 from taxstamp.money import Money, price_order
 from taxstamp.outbox import enqueue
 from taxstamp.providers.compliance import ComplianceService
+from taxstamp.services import registry
 from taxstamp.services.context import Actor
 
 REFERENCE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
@@ -47,10 +48,11 @@ def _reference(prefix: str, now: dt.datetime) -> str:
 @dataclass(frozen=True, slots=True)
 class SubmitOrderCommand:
     company_id: uuid.UUID
-    product_category: str
     quantity: int
     delivery_state: str
     delivery_address: str
+    product_category: str | None = None
+    product_id: uuid.UUID | None = None
 
 
 def _current_tariff(session: Session, product_category: str, now: dt.datetime) -> Tariff:
@@ -126,7 +128,23 @@ def submit_order(
             detail={"kyb_status": company.kyb_status},
         )
 
-    tariff = _current_tariff(session, command.product_category, now)
+    product = (
+        registry.orderable_product(session, product_id=command.product_id, company_id=company.id)
+        if command.product_id is not None
+        else None
+    )
+    if product is not None:
+        product_category = product.product_category
+    elif command.product_category is not None:
+        product_category = command.product_category
+    else:
+        raise ValidationFailed("either product_id or product_category is required")
+
+    licence = registry.effective_ordering_licence(
+        session, company_id=company.id, product_category=product_category, now=now
+    )
+
+    tariff = _current_tariff(session, product_category, now)
     breakdown = price_order(
         command.quantity,
         Money(tariff.unit_price_minor, tariff.currency),
@@ -135,15 +153,15 @@ def submit_order(
 
     # Refuses with CapabilityNotConfigured when a required registry is unconfigured, so an
     # order is never recorded with an unknown compliance state.
-    outcome = compliance.check(
-        tin=company.tin, product_category=command.product_category, quantity=command.quantity
-    )
+    outcome = compliance.check(tin=company.tin, product_category=product_category, quantity=command.quantity)
 
     order = Order(
         order_ref=_reference("ORD", now),
         company_id=company.id,
         submitted_by=actor.principal_id,
-        product_category=command.product_category,
+        product_category=product_category,
+        product_id=product.id if product is not None else None,
+        licence_id=licence.id,
         quantity=command.quantity,
         tariff_id=tariff.id,
         unit_price_minor=breakdown.unit_price.minor,
@@ -227,6 +245,8 @@ def _order_snapshot(order: Order) -> JsonObject:
         "total_minor": order.total_minor,
         "currency": order.currency,
         "product_category": order.product_category,
+        "product_id": str(order.product_id) if order.product_id else None,
+        "licence_id": str(order.licence_id) if order.licence_id is not None else None,
     }
 
 

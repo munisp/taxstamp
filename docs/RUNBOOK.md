@@ -38,7 +38,10 @@
 | Dead-lettered messages | Fix the cause, then requeue by resetting `dead_lettered_at` and `attempts` for the affected rows in a reviewed migration or maintenance script. |
 | `paid_order_without_receipt` finding | A payment was matched without a receipt row, or vice versa: stop issuance for that order and reconcile against the bank statement before intervening. |
 | `audit_chain_broken` finding | Treat as a security incident: the append-only triggers must have been bypassed. Preserve the database, take a snapshot, and escalate. |
-| Amount mismatch queue growing | Receipts are quarantined in `liability:unapplied_receipts`; resolve each with the payer before any refund or re-application. |
+| Amount mismatch queue growing | Receipts are quarantined in `liability:unapplied_receipts`. List them with `GET /v1/treasury/unapplied-receipts`, then either apply one to its payable order (exact amount and currency) with `POST /v1/treasury/unapplied-receipts/{id}/application` or return it with `POST .../refund` naming the beneficiary. Each receipt resolves once. |
+| `order_without_effective_licence` finding | An in-flight procurement now sits behind a licence that is missing, expired, suspended, revoked or not an ordering type. Decide per order: reinstate the licence, or cancel the order. Issuance is not blocked automatically once the order is already paid. |
+| `disposition_not_voided` finding | Stamps declared spoiled, damaged, destroyed or returned are still live. Treat as potential diversion: identify the serials from `stamp_dispositions.serials` and investigate before voiding. |
+| `overlapping_tariff` finding | Two rates cover the same category and date, so pricing is ambiguous. Close the earlier rate's effective period; new overlapping rates are refused at entry. |
 
 ## Observability
 

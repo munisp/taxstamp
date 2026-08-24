@@ -89,6 +89,25 @@ def test_bootstrap_issues_a_working_credential(
     )
     assert tariff.returncode == 0, tariff.stderr
 
+    licence = _run(
+        settings,
+        "issue-licence",
+        "--company-id",
+        company_id,
+        "--licence-number",
+        "LIC-CLI-0001",
+        "--licence-type",
+        "manufacturer",
+        "--product-categories",
+        "alcohol,tobacco",
+        "--valid-from",
+        "2020-01-01T00:00:00+00:00",
+        "--statutory-reference",
+        "Excise Licence Register 2020/17",
+    )
+    assert licence.returncode == 0, licence.stderr
+    assert _field(licence.stdout, "licence_id")
+
     principal = _run(
         settings,
         "create-principal",

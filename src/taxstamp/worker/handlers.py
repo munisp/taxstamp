@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from taxstamp.audit import AuditActor, AuditRecord, record_audit_event
-from taxstamp.jsontypes import JsonObject, require_int, require_str
+from taxstamp.jsontypes import JsonObject, optional_int, require_int, require_str
 from taxstamp.models import OutboxMessage, StampBatch
 from taxstamp.runtime import Runtime
 from taxstamp.services.issuance import issue_order
@@ -96,7 +96,9 @@ def handle_notify(runtime: Runtime, session: Session, payload: JsonObject) -> Js
 
 
 def handle_mismatch_review(runtime: Runtime, session: Session, payload: JsonObject) -> JsonObject:
-    expected = require_int(payload, "expected_minor")
+    # A remittance quoting an unknown reference has no intent, so there is no expected
+    # amount to compare against; the receipt still needs review.
+    expected = optional_int(payload, "expected_minor")
     received = require_int(payload, "amount_minor")
     logger.warning(
         "payment_mismatch_pending_review",

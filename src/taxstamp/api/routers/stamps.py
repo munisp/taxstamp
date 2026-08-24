@@ -11,11 +11,17 @@ from sqlalchemy.orm import Session
 
 from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, rate_limit, utc
 from taxstamp.api.idempotent import run_idempotent
-from taxstamp.api.schemas import ActivateStampsRequest, InspectionRequest, VoidStampsRequest
+from taxstamp.api.schemas import (
+    ActivateStampsRequest,
+    DispositionRequest,
+    InspectionRequest,
+    VoidStampsRequest,
+)
 from taxstamp.enums import Role
 from taxstamp.errors import NotFound
 from taxstamp.jsontypes import JsonObject
-from taxstamp.models import Inspection, Order, StampBatch
+from taxstamp.models import Inspection, Order, StampBatch, StampDisposition
+from taxstamp.services import accountability as accountability_service
 from taxstamp.services import inspection as inspection_service
 from taxstamp.services import stamps as stamp_service
 
@@ -159,6 +165,98 @@ def get_batch(batch_id: uuid.UUID, runtime: RuntimeDep, current: CurrentActor) -
                 if inspection is not None
                 else None
             ),
+        }
+
+
+@router.post("/batches/{batch_id}/dispositions", status_code=201)
+def declare_disposition(
+    batch_id: uuid.UUID,
+    body: DispositionRequest,
+    runtime: RuntimeDep,
+    current: CurrentActor,
+    key: IdempotencyKey,
+) -> JSONResponse:
+    actor = current.actor
+
+    def work(session: Session) -> JsonObject:
+        result = accountability_service.declare_disposition(
+            session,
+            actor=actor,
+            command=accountability_service.DeclareDispositionCommand(
+                batch_id=batch_id,
+                kind=body.kind,
+                serials=tuple(body.serials),
+                reason=body.reason,
+                evidence_reference=body.evidence_reference,
+            ),
+            now=runtime.clock.now(),
+            audit_secret=runtime.settings.audit_chain_secret,
+            revision=runtime.settings.revision,
+        )
+        return {
+            "disposition_id": str(result.disposition_id),
+            "batch_id": str(result.batch_id),
+            "kind": result.kind.value,
+            "stamp_count": result.stamp_count,
+        }
+
+    status, document = run_idempotent(
+        runtime,
+        scope="batches.dispositions",
+        key=key,
+        actor=actor,
+        payload={"batch_id": str(batch_id), **body.model_dump(mode="json")},
+        status=201,
+        work=work,
+    )
+    return JSONResponse(status_code=status, content=document)
+
+
+@router.get("/batches/{batch_id}/account")
+def batch_account(batch_id: uuid.UUID, runtime: RuntimeDep, current: CurrentActor) -> JsonObject:
+    """Stamp accountability for one batch: where every issued stamp is."""
+    actor = current.actor
+    actor.require_role(Role.OPERATOR, Role.ADMIN, Role.AUDITOR, Role.REQUESTER)
+    with runtime.session_factory() as session:
+        batch = session.get(StampBatch, batch_id)
+        if batch is None:
+            raise NotFound("batch not found")
+        if actor.role is Role.REQUESTER:
+            company_id = session.execute(
+                select(Order.company_id).where(Order.id == batch.order_id)
+            ).scalar_one()
+            actor.require_company(company_id)
+        account = accountability_service.batch_account(session, batch_id)
+        dispositions = (
+            session.execute(
+                select(StampDisposition)
+                .where(StampDisposition.batch_id == batch_id)
+                .order_by(StampDisposition.created_at)
+            )
+            .scalars()
+            .all()
+        )
+        return {
+            "batch_id": str(account.batch_id),
+            "order_ref": account.order_ref,
+            "issued_count": account.issued_count,
+            "active": account.active,
+            "unused": account.unused,
+            "void": account.void,
+            "expired": account.expired,
+            "declared_disposed": account.declared_disposed,
+            "balances": account.balances,
+            "dispositions": [
+                {
+                    "id": str(disposition.id),
+                    "kind": disposition.kind,
+                    "stamp_count": disposition.stamp_count,
+                    "reason": disposition.reason,
+                    "evidence_reference": disposition.evidence_reference,
+                    "created_at": utc(disposition.created_at),
+                }
+                for disposition in dispositions
+            ],
         }
 
 

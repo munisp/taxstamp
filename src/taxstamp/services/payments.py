@@ -160,8 +160,15 @@ def ingest_remittance(
             payload={"order_id": str(order.id), "quantity": order.quantity},
             available_at=now,
         )
-    elif status in (ReceiptStatus.AMOUNT_MISMATCH, ReceiptStatus.ORDER_NOT_PAYABLE) and intent is not None:
-        order_id = intent.order_id
+    elif status in (
+        ReceiptStatus.AMOUNT_MISMATCH,
+        ReceiptStatus.ORDER_NOT_PAYABLE,
+        ReceiptStatus.UNKNOWN_REFERENCE,
+    ):
+        # Money that arrived against an unknown reference is still money the state
+        # received, so it is recorded as an unapplied liability rather than left off
+        # the ledger entirely until someone identifies the payer.
+        order_id = intent.order_id if intent is not None else None
         # Quarantine the funds: they are held as an unapplied liability until treasury acts.
         post_journal(
             session,
@@ -185,7 +192,7 @@ def ingest_remittance(
                 "reason": status.value,
                 "declared_reference": advice.declared_reference,
                 "amount_minor": advice.amount_minor,
-                "expected_minor": intent.amount_minor,
+                "expected_minor": intent.amount_minor if intent is not None else None,
                 "order_status": order.status if order is not None else None,
             },
             available_at=now,

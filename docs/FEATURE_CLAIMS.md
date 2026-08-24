@@ -7,6 +7,11 @@ code path pretends otherwise).
 
 | Capability | Status | Evidence / enforcement |
 | --- | --- | --- |
+| Excise licensing (manufacturer / importer / distributor) as a procurement precondition | implemented | `tests/e2e/test_registry_api.py` (no licence, expired, suspended, revoked, wrong category, distributor-only all refuse procurement) |
+| Product master data (SKU, brand, pack size, intended market) | implemented | `tests/e2e/test_registry_api.py` (company-scoped, withdrawn and foreign products cannot be ordered) |
+| Statutory tariff versioning with overlap refusal | implemented | `tests/integration/test_registry_governance.py`; API and CLI both refuse an overlapping effective period, and existing overlaps are reported by reconciliation |
+| Stamp accountability (spoiled / damaged / destroyed / returned) | implemented | `tests/e2e/test_accountability_api.py` (serial-level evidence, batch population account, live-stamp declarations reported by reconciliation) |
+| Treasury resolution of held funds (application / refund) | implemented | `tests/e2e/test_treasury_api.py` (exact amount and currency, balanced journals, one resolution per receipt) |
 | Order intake with server-side pricing | implemented | `tests/e2e/test_lifecycle.py`, `services/orders.py`; client-supplied totals are rejected |
 | Effective-dated tariff lookup | implemented | `tests/integration/test_cli.py`, `services/orders.py` |
 | Maker-checker approval | implemented | `tests/e2e/test_authorization.py` (submitter cannot approve; one decision per level) |
@@ -27,3 +32,23 @@ code path pretends otherwise).
 | Holographic / taggant verification | not implemented | declared unavailable |
 | Offline verification sync | not implemented | declared unavailable |
 | Blockchain registration as a system of record | not implemented | only external anchoring of a Merkle root, and only when configured |
+
+## Market-parity capabilities not yet built
+
+Benchmarked against SICPA SICPATRACE Evo, Authentix and De La Rue, and against WHO FCTC
+Art. 8 and EU Implementing Regulation 2018/574. These are scheduled, not claimed.
+
+| Capability | Status |
+| --- | --- |
+| Supply-chain traceability events and aggregation (item → pack → case → pallet) | not implemented |
+| Regulator repository queries and statutory exports | not implemented |
+| Import, free-zone and duty-free flows | not implemented |
+| Retention and data-portability controls | not implemented |
+| Clone and diversion detection | not implemented |
+| Public transparency log | not implemented |
+| EPCIS-shaped interoperability | not implemented |
+| Consumer verification channel | not implemented |
+| Enforcement case management | not implemented |
+| Revenue and compliance KPI reporting | not implemented |
+| Offline verification bundles | not implemented |
+| Explainable risk scoring and revenue-at-risk analytics | not implemented |

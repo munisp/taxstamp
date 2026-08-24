@@ -17,12 +17,13 @@ from sqlalchemy import select
 from taxstamp.audit import verify_audit_chain
 from taxstamp.clock import utcnow
 from taxstamp.db import transaction
-from taxstamp.enums import KybStatus, RiskTier, Role
-from taxstamp.models import Company, Credential, Principal, Tariff
+from taxstamp.enums import KybStatus, LicenceStatus, LicenceType, RiskTier, Role
+from taxstamp.models import Company, Credential, Licence, Principal, Tariff
 from taxstamp.money import Money
 from taxstamp.runtime import build_runtime
 from taxstamp.security import generate_token, hash_token
 from taxstamp.services.reconciliation import run_reconciliation
+from taxstamp.services.registry import assert_tariff_period_free
 
 
 def _create_principal(args: argparse.Namespace) -> int:
@@ -77,16 +78,45 @@ def _create_company(args: argparse.Namespace) -> int:
     return 0
 
 
+def _issue_licence(args: argparse.Namespace) -> int:
+    runtime = build_runtime()
+    categories = sorted({value.strip() for value in args.product_categories.split(",") if value.strip()})
+    with transaction(runtime.session_factory) as session:
+        licence = Licence(
+            licence_number=args.licence_number,
+            company_id=uuid.UUID(args.company_id),
+            licence_type=LicenceType(args.licence_type).value,
+            product_categories=categories,
+            status=LicenceStatus.ACTIVE.value,
+            valid_from=dt.datetime.fromisoformat(args.valid_from),
+            valid_to=dt.datetime.fromisoformat(args.valid_to) if args.valid_to else None,
+            statutory_reference=args.statutory_reference,
+            created_at=utcnow(),
+        )
+        session.add(licence)
+        session.flush()
+        print(f"licence_id={licence.id}")  # noqa: T201 - CLI output
+    runtime.close()
+    return 0
+
+
 def _add_tariff(args: argparse.Namespace) -> int:
     runtime = build_runtime()
     unit_price = Money.from_major(Decimal(args.unit_price_major), args.currency)
+    effective_from = dt.datetime.fromisoformat(args.effective_from)
     with transaction(runtime.session_factory) as session:
+        assert_tariff_period_free(
+            session,
+            product_category=args.product_category,
+            effective_from=effective_from,
+            effective_to=None,
+        )
         tariff = Tariff(
             product_category=args.product_category,
             unit_price_minor=unit_price.minor,
             currency=args.currency,
             vat_bps=args.vat_bps,
-            effective_from=dt.datetime.fromisoformat(args.effective_from),
+            effective_from=effective_from,
             statutory_reference=args.statutory_reference,
             created_at=utcnow(),
         )
@@ -144,6 +174,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     company.add_argument("--risk-tier", default=RiskTier.MEDIUM.value, choices=[t.value for t in RiskTier])
     company.set_defaults(func=_create_company)
+
+    licence = sub.add_parser("issue-licence", help="issue an excise licence to a company")
+    licence.add_argument("--company-id", required=True)
+    licence.add_argument("--licence-number", required=True)
+    licence.add_argument("--licence-type", required=True, choices=[kind.value for kind in LicenceType])
+    licence.add_argument("--product-categories", required=True, help="comma-separated product categories")
+    licence.add_argument("--valid-from", required=True, help="ISO-8601 timestamp with offset")
+    licence.add_argument("--valid-to", default=None, help="ISO-8601 timestamp with offset")
+    licence.add_argument("--statutory-reference", required=True)
+    licence.set_defaults(func=_issue_licence)
 
     tariff = sub.add_parser("add-tariff", help="add an effective-dated tariff")
     tariff.add_argument("--product-category", required=True)

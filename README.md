@@ -1,9 +1,15 @@
 # taxstamp
 
-Excise tax-stamp issuance, settlement and field verification: order intake, maker-checker
-approval, exact-amount payment matching, double-entry posting, resumable serial issuance,
-acceptance sampling, activation, and signed field verification, with an append-only audit
-chain and reconciliation.
+Excise tax-stamp issuance, settlement and field verification: licensing and product master
+data, order intake, maker-checker approval, exact-amount payment matching, double-entry
+posting, resumable serial issuance, acceptance sampling, activation, signed field
+verification and stamp accountability, with an append-only audit chain and reconciliation.
+
+Procurement is licence-controlled: a company needs an effective manufacturer or importer
+licence covering the ordered product category before it can order stamps
+(`POST /v1/licences`, `POST /v1/products`). Held funds are resolved by treasury
+(`/v1/treasury/unapplied-receipts`), and spoiled, damaged, destroyed or returned stamps are
+declared per serial (`POST /v1/batches/{id}/dispositions`).
 
 ## What is real and what is not
 

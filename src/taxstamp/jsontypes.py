@@ -32,6 +32,17 @@ def require_bool(document: JsonObject, key: str) -> bool:
     return value
 
 
+def optional_int(document: JsonObject, key: str) -> int | None:
+    value = document.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(  # noqa: TRY004 - untrusted payload
+            f"field {key!r} must be an integer when present"
+        )
+    return value
+
+
 def optional_str(document: JsonObject, key: str) -> str | None:
     value = document.get(key)
     if value is None:

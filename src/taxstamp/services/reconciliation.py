@@ -14,19 +14,30 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from taxstamp.audit import verify_audit_chain
-from taxstamp.enums import OrderStatus, PaymentIntentStatus, ReceiptStatus
+from taxstamp.enums import (
+    ORDERING_LICENCE_TYPES,
+    LicenceStatus,
+    OrderStatus,
+    PaymentIntentStatus,
+    ReceiptStatus,
+    ResolutionKind,
+)
 from taxstamp.jsontypes import JsonObject, JsonValue
 from taxstamp.ledger import Account, account_balance, unbalanced_journals
 from taxstamp.models import (
     Journal,
+    Licence,
     Order,
     OutboxMessage,
     PaymentIntent,
     PaymentReceipt,
+    ReceiptResolution,
     ReconciliationRun,
     Stamp,
     StampBatch,
 )
+from taxstamp.services.accountability import unaccounted_dispositions
+from taxstamp.services.registry import overlapping_tariffs
 
 #: Every kind a run can report. Published unconditionally so a resolved finding
 #: reports zero instead of keeping its last non-zero value in the gauge.
@@ -39,6 +50,9 @@ FINDING_KINDS: tuple[str, ...] = (
     "duplicate_serial",
     "outbox_backlog",
     "audit_chain_broken",
+    "overlapping_tariff",
+    "order_without_effective_licence",
+    "disposition_not_voided",
 )
 
 
@@ -112,6 +126,11 @@ def _settlement_conservation(session: Session) -> Finding | None:
 
 
 def _settled_orders_without_matching_receipt(session: Session) -> Finding | None:
+    """A paid order must be backed by a matched receipt or an applied resolution.
+
+    Treasury can settle an order from funds held under a different reference, which is
+    evidenced by a resolution row rather than a matched receipt.
+    """
     rows = list(
         session.execute(
             select(Order.order_ref)
@@ -121,11 +140,17 @@ def _settled_orders_without_matching_receipt(session: Session) -> Finding | None
                 (PaymentReceipt.payment_intent_id == PaymentIntent.id)
                 & (PaymentReceipt.status == ReceiptStatus.MATCHED.value),
             )
+            .outerjoin(
+                ReceiptResolution,
+                (ReceiptResolution.order_id == Order.id)
+                & (ReceiptResolution.kind == ResolutionKind.APPLIED.value),
+            )
             .where(
                 Order.status.in_(
                     [OrderStatus.PAID.value, OrderStatus.ISSUING.value, OrderStatus.ISSUED.value]
                 ),
                 PaymentReceipt.id.is_(None),
+                ReceiptResolution.id.is_(None),
             )
             .limit(50)
         )
@@ -240,6 +265,78 @@ def _audit_chain(session: Session, *, secret: str) -> Finding | None:
     )
 
 
+def _overlapping_tariffs(session: Session) -> Finding | None:
+    overlaps = overlapping_tariffs(session)
+    if not overlaps:
+        return None
+    return Finding(
+        kind="overlapping_tariff",
+        count=len(overlaps),
+        detail={
+            "pairs": [
+                {"product_category": category, "tariff_ids": [str(first), str(second)]}
+                for category, first, second in overlaps[:20]
+            ]
+        },
+    )
+
+
+def _orders_without_effective_licence(session: Session, *, now: dt.datetime) -> Finding | None:
+    """Live orders whose licence has since lapsed, been suspended or been revoked.
+
+    Not a fraud signal on its own: it tells the authority which in-flight procurement
+    now sits behind an unlicensed entity and needs a decision.
+    """
+    rows = list(
+        session.execute(
+            select(Order.order_ref, Licence.licence_number, Licence.status)
+            .outerjoin(Licence, Licence.id == Order.licence_id)
+            .where(
+                Order.status.notin_(
+                    [
+                        OrderStatus.ISSUED.value,
+                        OrderStatus.CANCELLED.value,
+                        OrderStatus.REJECTED.value,
+                        OrderStatus.COMPLIANCE_REJECTED.value,
+                    ]
+                ),
+                Order.licence_id.is_(None)
+                | (Licence.status != LicenceStatus.ACTIVE.value)
+                | (Licence.valid_to.is_not(None) & (Licence.valid_to <= now))
+                | (Licence.licence_type.notin_([kind.value for kind in ORDERING_LICENCE_TYPES])),
+            )
+            .limit(50)
+        ).all()
+    )
+    if not rows:
+        return None
+    return Finding(
+        kind="order_without_effective_licence",
+        count=len(rows),
+        detail={
+            "orders": [
+                {"order_ref": row[0], "licence_number": row[1], "licence_status": row[2]} for row in rows
+            ]
+        },
+    )
+
+
+def _dispositions_not_voided(session: Session) -> Finding | None:
+    rows = unaccounted_dispositions(session)
+    if not rows:
+        return None
+    return Finding(
+        kind="disposition_not_voided",
+        count=len(rows),
+        detail={
+            "dispositions": [
+                {"disposition_id": str(disposition_id), "declared": declared, "still_live": live}
+                for disposition_id, declared, live in rows[:20]
+            ]
+        },
+    )
+
+
 def run_reconciliation(
     session: Session,
     *,
@@ -256,6 +353,9 @@ def run_reconciliation(
         _duplicate_serials(session),
         _outbox_health(session, now=now, stale_after_seconds=outbox_stale_after_seconds),
         _audit_chain(session, secret=audit_secret),
+        _overlapping_tariffs(session),
+        _orders_without_effective_licence(session, now=now),
+        _dispositions_not_voided(session),
     ]
     findings = tuple(finding for finding in checks if finding is not None)
     report = ReconciliationReport(findings=findings, checks_run=len(checks))
