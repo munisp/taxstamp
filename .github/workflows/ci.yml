@@ -1,0 +1,66 @@
+name: ci
+on:
+  push: {branches: [main]}
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.6-alpine
+        env:
+          POSTGRES_DB: taxstamp
+          POSTGRES_USER: taxstamp
+          POSTGRES_PASSWORD: taxstamp
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U taxstamp" --health-interval 5s
+          --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7.4.1-alpine
+        ports: ["56379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 3s --health-retries 20
+    env:
+      TAXSTAMP_TEST_PG_HOST: 127.0.0.1
+      TAXSTAMP_TEST_PG_PORT: "55432"
+      TAXSTAMP_TEST_REDIS_URL: redis://127.0.0.1:56379/9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Create the environment
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements-dev.txt
+          .venv/bin/pip install -e . --no-deps
+      - run: make lint
+      - run: make type
+      - run: make security
+      - run: make audit-deps
+      - run: make test
+      - name: Migration cycle (upgrade, downgrade, upgrade)
+        env:
+          TAXSTAMP_DATABASE_URL: postgresql+psycopg://taxstamp:taxstamp@127.0.0.1:55432/taxstamp
+        run: |
+          .venv/bin/alembic upgrade head
+          .venv/bin/alembic downgrade base
+          .venv/bin/alembic upgrade head
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the runtime image
+        run: docker build --target runtime -t taxstamp:ci .
