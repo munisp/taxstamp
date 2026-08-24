@@ -8,11 +8,11 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep
+from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, authorize
 from taxstamp.api.idempotent import run_idempotent
 from taxstamp.api.schemas import OfflineSyncRequest
+from taxstamp.authz.actions import Action
 from taxstamp.db import transaction
-from taxstamp.enums import Role
 from taxstamp.errors import NotFound
 from taxstamp.jsontypes import JsonObject
 from taxstamp.services import offline as offline_service
@@ -55,7 +55,7 @@ def publish_bundle(
 
 @router.get("/bundles/latest")
 def latest_bundle(runtime: RuntimeDep, current: CurrentActor) -> JsonObject:
-    current.actor.require_role(Role.DEVICE, Role.OPERATOR, Role.ANALYST, Role.SUPERVISOR, Role.ADMIN)
+    authorize(runtime, current.actor, Action.OFFLINE_BUNDLE_READ)
     with runtime.session_factory() as session:
         bundle = offline_service.latest_bundle(session)
         if bundle is None:
@@ -120,6 +120,6 @@ def scan_history(
     current: CurrentActor,
     limit: int = Query(default=20, ge=1, le=100),
 ) -> JsonObject:
-    current.actor.require_role(Role.DEVICE, Role.OPERATOR, Role.ANALYST, Role.SUPERVISOR, Role.ADMIN)
+    authorize(runtime, current.actor, Action.OFFLINE_BUNDLE_READ)
     with transaction(runtime.session_factory) as session:
         return offline_service.batch_history(session, device_id=device_id, limit=limit)

@@ -82,3 +82,68 @@ def test_production_rejects_unencrypted_database() -> None:
 def test_unknown_setting_is_rejected() -> None:
     with pytest.raises(ValidationError):
         Settings(**{**BASE, "unexpected_option": "1"})
+
+
+def test_federation_is_off_by_default() -> None:
+    """Absent configuration must mean "refuse provider tokens", not "trust them"."""
+    settings = Settings(**BASE)
+    assert settings.oidc_issuer == ""
+    assert settings.effective_oidc_jwks_url == ""
+    assert settings.authz_external_mode == "disabled"
+
+
+def test_jwks_url_defaults_to_the_issuer_discovery_path() -> None:
+    settings = Settings(**{**BASE, "oidc_issuer": "https://sso.example/realms/taxstamp/"})
+    assert settings.effective_oidc_jwks_url == (
+        "https://sso.example/realms/taxstamp/protocol/openid-connect/certs"
+    )
+
+
+def test_audience_without_an_issuer_is_rejected() -> None:
+    """A half-configured verifier would accept audiences from any issuer."""
+    with pytest.raises(ValidationError):
+        Settings(**{**BASE, "oidc_audience": "taxstamp-api"})
+
+
+@pytest.mark.parametrize("mode", ["shadow", "enforcing"])
+def test_external_authorisation_requires_an_engine(mode: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings(**{**BASE, "authz_external_mode": mode})
+
+
+def test_unknown_authorisation_mode_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        Settings(**{**BASE, "authz_external_mode": "advisory"})
+
+
+def test_identity_endpoints_must_be_urls() -> None:
+    with pytest.raises(ValidationError):
+        Settings(**{**BASE, "oidc_issuer": "sso.example"})
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"oidc_issuer": "http://sso.internal/realms/taxstamp"},
+        {
+            "permify_base_url": "http://permify.internal:3476",
+            "authz_external_mode": "enforcing",
+        },
+    ],
+)
+def test_production_rejects_plaintext_identity_endpoints(override: dict[str, str]) -> None:
+    """Tokens and authorisation verdicts must not cross a network in the clear."""
+    with pytest.raises(ValidationError):
+        Settings(**{**BASE, "env": Environment.PRODUCTION, **override})
+
+
+def test_multi_factor_configuration_is_parsed_into_sets() -> None:
+    settings = Settings(
+        **{
+            **BASE,
+            "oidc_mfa_methods": "OTP, hwk ,",
+            "oidc_mfa_required_roles": "Admin,treasury",
+        }
+    )
+    assert settings.oidc_mfa_method_set == {"otp", "hwk"}
+    assert settings.oidc_mfa_role_set == {"admin", "treasury"}

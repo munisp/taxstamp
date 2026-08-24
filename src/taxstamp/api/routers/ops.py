@@ -7,11 +7,11 @@ from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import func, select
 
-from taxstamp.api.deps import CurrentActor, RuntimeDep
+from taxstamp.api.deps import CurrentActor, RuntimeDep, authorize
 from taxstamp.audit import verify_audit_chain
+from taxstamp.authz.actions import Action
 from taxstamp.capabilities import capability_document
 from taxstamp.db import transaction
-from taxstamp.enums import Role
 from taxstamp.jsontypes import JsonObject
 from taxstamp.models import OutboxMessage
 from taxstamp.services.reconciliation import run_reconciliation
@@ -46,7 +46,7 @@ def capabilities(runtime: RuntimeDep) -> JsonObject:
 
 @router.get("/metrics")
 def metrics(runtime: RuntimeDep, current: CurrentActor) -> Response:
-    current.actor.require_role(Role.ADMIN, Role.AUDITOR)
+    authorize(runtime, current.actor, Action.OPS_METRICS_READ)
     with runtime.session_factory() as session:
         pending = session.execute(
             select(func.count())
@@ -63,7 +63,7 @@ def metrics(runtime: RuntimeDep, current: CurrentActor) -> Response:
 
 @router.post("/v1/ops/reconciliation", status_code=200)
 def reconcile(runtime: RuntimeDep, current: CurrentActor) -> JsonObject:
-    current.actor.require_role(Role.ADMIN, Role.AUDITOR)
+    authorize(runtime, current.actor, Action.OPS_RECONCILE)
     with transaction(runtime.session_factory) as session:
         report = run_reconciliation(
             session,
@@ -79,7 +79,7 @@ def reconcile(runtime: RuntimeDep, current: CurrentActor) -> JsonObject:
 
 @router.get("/v1/ops/audit-chain")
 def audit_chain(runtime: RuntimeDep, current: CurrentActor) -> JsonObject:
-    current.actor.require_role(Role.ADMIN, Role.AUDITOR)
+    authorize(runtime, current.actor, Action.OPS_AUDIT_READ)
     with runtime.session_factory() as session:
         result = verify_audit_chain(session, secret=runtime.settings.audit_chain_secret)
         return {

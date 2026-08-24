@@ -13,3 +13,6 @@ structlog==24.4.0
 prometheus-client==0.21.1
 python-dateutil==2.9.0.post0
 segno==1.6.1
+# Federated identity: token verification only. The platform never issues these tokens.
+PyJWT==2.13.0
+cryptography==50.0.0

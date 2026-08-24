@@ -68,5 +68,44 @@ services:
       resources:
         limits: {cpus: "1.0", memory: 512M}
 
+  # Everything below is behind the "edge" profile: `docker compose --profile edge up`.
+  # The core stack must keep working without it, because these components secure and
+  # federate access - they are not in the request's correctness path.
+
+  # APISIX terminates TLS in production, caps body sizes and enforces per-route quotas.
+  # In development it serves plain HTTP on 9081 and forwards to the API.
+  apisix:
+    profiles: ["edge"]
+    image: apache/apisix:3.11.0-debian
+    volumes:
+      - ./deploy/edge/apisix.yaml:/usr/local/apisix/conf/apisix.yaml:ro
+      - ./deploy/edge/apisix-config.yaml:/usr/local/apisix/conf/config.yaml:ro
+    ports: ["9081:9080"]
+    depends_on:
+      api: {condition: service_started}
+      redis: {condition: service_healthy}
+
+  # Keycloak issues sessions for humans. Devices never use it, so the core stack does not
+  # depend on it being up.
+  keycloak:
+    profiles: ["edge"]
+    image: quay.io/keycloak/keycloak:26.0.7
+    command: ["start-dev", "--import-realm", "--http-port=8081"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: development-only-not-a-real-password
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./deploy/identity/keycloak-realm.json:/opt/keycloak/data/import/realm.json:ro
+    ports: ["8081:8081"]
+
+  # Permify answers delegation questions. Left in "disabled" authz mode by default: a
+  # policy engine must be proven in shadow mode before anything is enforced through it.
+  permify:
+    profiles: ["edge"]
+    image: ghcr.io/permify/permify:v1.2.6
+    command: ["serve", "--database-engine=memory"]
+    ports: ["3476:3476"]
+
 volumes:
   pgdata:

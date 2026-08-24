@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep
+from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, authorize
 from taxstamp.api.idempotent import run_idempotent
 from taxstamp.api.schemas import (
     DeclareConsignmentRequest,
@@ -14,6 +14,7 @@ from taxstamp.api.schemas import (
     RejectConsignmentRequest,
     ReleaseConsignmentRequest,
 )
+from taxstamp.authz.actions import Action
 from taxstamp.enums import CustomsRegime
 from taxstamp.jsontypes import JsonObject
 from taxstamp.services import customs as customs_service
@@ -29,6 +30,7 @@ def declare_consignment(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.CUSTOMS_DECLARE)
 
     def work(session: Session) -> JsonObject:
         consignment = customs_service.declare_consignment(
@@ -72,6 +74,7 @@ def link_consignment_stamps(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.CUSTOMS_DECLARE)
 
     def work(session: Session) -> JsonObject:
         consignment = customs_service.link_stamps(
@@ -108,6 +111,7 @@ def release_consignment(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.CUSTOMS_RELEASE)
 
     def work(session: Session) -> JsonObject:
         consignment = customs_service.release_consignment(
@@ -144,6 +148,7 @@ def reject_consignment(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.CUSTOMS_RELEASE)
 
     def work(session: Session) -> JsonObject:
         consignment = customs_service.reject_consignment(

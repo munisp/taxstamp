@@ -62,6 +62,32 @@ class Settings(BaseSettings):
     #: link between past and future consumer checks, which is why it is separate.
     consumer_fingerprint_secret: str
 
+    # Federated identity for human principals. Empty issuer means "not configured", and
+    # federated bearer tokens are then refused rather than accepted unverified; devices
+    # and service accounts always use the platform's own credentials.
+    oidc_issuer: str = ""
+    oidc_audience: str = ""
+    #: Defaults to the issuer's standard JWKS location when left empty.
+    oidc_jwks_url: str = ""
+    oidc_leeway_seconds: int = Field(default=30, ge=0, le=120)
+    oidc_jwks_cache_seconds: int = Field(default=600, ge=60, le=86_400)
+    #: Authentication methods that count as multi-factor, as asserted in ``amr``.
+    oidc_mfa_methods: str = "mfa,otp,hwk,swk,pop"
+    #: Authentication context class that counts as multi-factor, as asserted in ``acr``.
+    oidc_mfa_acr: str = "mfa"
+    #: Roles that may not hold a federated session without a multi-factor assertion.
+    oidc_mfa_required_roles: str = "admin,supervisor,treasury,auditor"
+
+    # External authorisation engine. See taxstamp.authz.policy for the decision order.
+    permify_base_url: str = ""
+    permify_tenant_id: str = ""
+    permify_api_key: str = ""
+    permify_schema_version: str = ""
+    permify_timeout_seconds: float = Field(default=1.0, gt=0, le=10)
+    #: One of disabled, shadow, enforcing. Enforcing refuses requests the engine cannot
+    #: answer, so it must not be selected before the engine is highly available.
+    authz_external_mode: str = "disabled"
+
     require_tls: bool = True
     cors_allowed_origins: str = ""
     trusted_hosts: str = ""
@@ -125,6 +151,21 @@ class Settings(BaseSettings):
             raise ValueError(f"secret must be at least {MIN_SECRET_LENGTH} characters")
         return value
 
+    @field_validator("authz_external_mode")
+    @classmethod
+    def _validate_authz_mode(cls, value: str) -> str:
+        allowed = {"disabled", "shadow", "enforcing"}
+        if value not in allowed:
+            raise ValueError(f"authz_external_mode must be one of {sorted(allowed)}")
+        return value
+
+    @field_validator("oidc_issuer", "oidc_jwks_url", "permify_base_url")
+    @classmethod
+    def _validate_https_endpoint(cls, value: str) -> str:
+        if value and not value.startswith(("http://", "https://")):
+            raise ValueError("endpoint must be an http:// or https:// URL")
+        return value
+
     @field_validator("database_url")
     @classmethod
     def _validate_database_url(cls, value: str) -> str:
@@ -164,7 +205,39 @@ class Settings(BaseSettings):
                 raise ValueError("wildcard CORS origins are not permitted outside development")
             if self.env is Environment.PRODUCTION and "sslmode=disable" in self.database_url:
                 raise ValueError("database connections must not disable TLS in production")
+            for name, endpoint in (
+                ("oidc_issuer", self.oidc_issuer),
+                ("oidc_jwks_url", self.oidc_jwks_url),
+                ("permify_base_url", self.permify_base_url),
+            ):
+                if endpoint.startswith("http://"):
+                    raise ValueError(f"{name} must use TLS outside development/test")
+        if self.authz_external_mode != "disabled" and not self.permify_base_url:
+            raise ValueError("authz_external_mode requires permify_base_url")
+        if self.oidc_audience and not self.oidc_issuer:
+            raise ValueError("oidc_audience requires oidc_issuer")
         return self
+
+    @property
+    def effective_oidc_jwks_url(self) -> str:
+        """The configured JWKS location, or the issuer's standard discovery path."""
+        if self.oidc_jwks_url:
+            return self.oidc_jwks_url
+        if not self.oidc_issuer:
+            return ""
+        return self.oidc_issuer.rstrip("/") + "/protocol/openid-connect/certs"
+
+    @property
+    def oidc_mfa_method_set(self) -> frozenset[str]:
+        return frozenset(
+            method.strip().lower() for method in self.oidc_mfa_methods.split(",") if method.strip()
+        )
+
+    @property
+    def oidc_mfa_role_set(self) -> frozenset[str]:
+        return frozenset(
+            role.strip().lower() for role in self.oidc_mfa_required_roles.split(",") if role.strip()
+        )
 
     @property
     def cors_origins(self) -> list[str]:

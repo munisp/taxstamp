@@ -9,3 +9,7 @@ types-python-dateutil==2.9.0.20241206
 bandit==1.8.0
 pip-audit==2.7.3
 hypothesis==6.122.3
+# Reading the edge and identity deployment artifacts in tests, so a configuration that
+# no longer matches the code cannot pass CI.
+PyYAML==6.0.2
+types-PyYAML==6.0.12.20241230

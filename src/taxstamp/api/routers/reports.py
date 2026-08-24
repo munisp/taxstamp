@@ -7,7 +7,8 @@ import uuid
 
 from fastapi import APIRouter
 
-from taxstamp.api.deps import CurrentActor, RuntimeDep
+from taxstamp.api.deps import CurrentActor, RuntimeDep, authorize
+from taxstamp.authz.actions import Action
 from taxstamp.errors import ValidationFailed
 from taxstamp.jsontypes import JsonObject
 from taxstamp.services import reporting as reporting_service
@@ -31,6 +32,7 @@ def programme_kpis(
     start: dt.datetime | None = None,
     end: dt.datetime | None = None,
 ) -> JsonObject:
+    authorize(runtime, current.actor, Action.REPORT_PROGRAMME)
     window = _window(start, end, runtime.clock.now())
     with runtime.session_factory() as session:
         return reporting_service.programme_kpis(session, actor=current.actor, window=window)
@@ -43,6 +45,7 @@ def revenue_at_risk(
     start: dt.datetime | None = None,
     end: dt.datetime | None = None,
 ) -> JsonObject:
+    authorize(runtime, current.actor, Action.REPORT_PROGRAMME)
     window = _window(start, end, runtime.clock.now())
     with runtime.session_factory() as session:
         return reporting_service.revenue_at_risk(session, actor=current.actor, window=window)
@@ -50,6 +53,7 @@ def revenue_at_risk(
 
 @router.get("/risk/{company_id}")
 def company_risk(company_id: uuid.UUID, runtime: RuntimeDep, current: CurrentActor) -> JsonObject:
+    authorize(runtime, current.actor, Action.REPORT_RISK)
     with runtime.session_factory() as session:
         assessment = risk_service.assess_company(
             session, actor=current.actor, company_id=company_id, now=runtime.clock.now()

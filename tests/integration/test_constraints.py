@@ -106,3 +106,32 @@ def test_negative_quantity_order_is_rejected(db: Session) -> None:
     with pytest.raises((IntegrityError, DBAPIError)):
         db.commit()
     db.rollback()
+
+
+def test_one_provider_subject_cannot_be_linked_to_two_principals(db: Session) -> None:
+    """Two principals sharing a provider subject would make the audit identity ambiguous."""
+    create_identity(db, role=Role.ADMIN, api_token_secret="x" * 48, oidc_subject="idp-shared")
+    db.commit()
+    with pytest.raises(IntegrityError):
+        create_identity(db, role=Role.AUDITOR, api_token_secret="x" * 48, oidc_subject="idp-shared")
+    db.rollback()
+
+
+def test_devices_cannot_be_federated(db: Session) -> None:
+    """A device fleet must keep its own credentials.
+
+    A device has no interactive login, and must be able to verify a stamp while the
+    identity provider is unreachable, so linking one to a provider subject is refused by
+    the database rather than only by application code.
+    """
+    company = create_company(db)
+    db.commit()
+    with pytest.raises((IntegrityError, DBAPIError)):
+        create_identity(
+            db,
+            role=Role.DEVICE,
+            api_token_secret="x" * 48,
+            company_id=company.id,
+            oidc_subject="idp-device",
+        )
+    db.rollback()

@@ -54,6 +54,8 @@ def create_identity(
     api_token_secret: str,
     company_id: uuid.UUID | None = None,
     subject: str | None = None,
+    oidc_subject: str | None = None,
+    active: bool = True,
     now: dt.datetime = EPOCH,
 ) -> Identity:
     resolved_subject = subject or f"{role.value}-{uuid.uuid4().hex[:8]}"
@@ -62,7 +64,8 @@ def create_identity(
         role=role.value,
         company_id=company_id,
         display_name=resolved_subject,
-        active=True,
+        oidc_subject=oidc_subject,
+        active=active,
         created_at=now,
     )
     session.add(principal)

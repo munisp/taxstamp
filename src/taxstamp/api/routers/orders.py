@@ -9,9 +9,10 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, rate_limit, utc
+from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, authorize, rate_limit, utc
 from taxstamp.api.idempotent import run_idempotent
 from taxstamp.api.schemas import ApprovalRequest, CancelOrderRequest, CreateOrderRequest
+from taxstamp.authz.actions import Action
 from taxstamp.enums import Role
 from taxstamp.errors import NotFound
 from taxstamp.jsontypes import JsonObject
@@ -53,7 +54,7 @@ def create_order(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
-    actor.require_role(Role.REQUESTER, Role.ADMIN)
+    authorize(runtime, actor, Action.ORDER_CREATE)
     rate_limit(runtime, actor, "orders", runtime.settings.rate_limit_default)
 
     def work(session: Session) -> JsonObject:

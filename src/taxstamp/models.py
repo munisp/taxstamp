@@ -121,6 +121,10 @@ class Principal(Base):
     )
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    #: The identity provider's immutable subject for this person, when their sessions are
+    #: federated. Set explicitly by an administrator: a token for an unlinked subject is
+    #: refused rather than provisioning a principal, so the provider cannot mint access.
+    oidc_subject: Mapped[str | None] = mapped_column(String(255), unique=True)
     created_at: Mapped[dt.datetime] = _created_at()
 
     __table_args__ = (
@@ -128,6 +132,10 @@ class Principal(Base):
         CheckConstraint(
             "(role IN ('requester') AND company_id IS NOT NULL) OR role NOT IN ('requester')",
             name="requester_requires_company",
+        ),
+        CheckConstraint(
+            "oidc_subject IS NULL OR role <> 'device'",
+            name="devices_are_not_federated",
         ),
     )
 

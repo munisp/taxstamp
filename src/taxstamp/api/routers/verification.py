@@ -14,10 +14,10 @@ import structlog
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 
-from taxstamp.api.deps import CurrentActor, RuntimeDep, rate_limit, utc
+from taxstamp.api.deps import CurrentActor, RuntimeDep, authorize, rate_limit, utc
 from taxstamp.api.schemas import VerifyRequest, parse_signed_body
+from taxstamp.authz.actions import Action
 from taxstamp.db import transaction
-from taxstamp.enums import Role
 from taxstamp.errors import Unauthenticated, ValidationFailed
 from taxstamp.jsontypes import JsonObject
 from taxstamp.security import SignatureError, SignedRequest, verify_signed_request
@@ -35,8 +35,7 @@ async def verify(
     x_signature: str = Header(default=""),
     x_timestamp: str = Header(default=""),
 ) -> JSONResponse:
-    actor = current.actor
-    actor.require_role(Role.DEVICE, Role.OPERATOR, Role.ADMIN)
+    actor = authorize(runtime, current.actor, Action.VERIFY_FIELD)
     rate_limit(runtime, actor, "verify", runtime.settings.rate_limit_verify)
 
     raw = await request.body()

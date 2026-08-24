@@ -28,7 +28,12 @@ environment, and each is individually sufficient for a BLOCKED decision:
 6. **No enforcement-authority evidence.** A prosecution referral is recorded internally
    only. Nothing has been filed with, or acknowledged by, any prosecuting authority, and
    the platform never claims otherwise.
-7. **No field-device evidence.** Offline bundles and scan synchronisation are verified over
+7. **No deployed edge or operated identity provider.** The gateway configuration, the realm
+   and the policy schema are all verified to load and behave against real products started
+   locally, but there is no TLS certificate, no client certificate authority for the device
+   fleet, no WAF in prevention mode and no provisioned staff directory. The edge and
+   identity tier exists as verified configuration, not as an operated control.
+8. **No field-device evidence.** Offline bundles and scan synchronisation are verified over
    HTTP against this service; no handheld scanner fleet has been exercised, so the
    distribution and staleness behaviour is untested on real devices.
 
@@ -48,6 +53,11 @@ environment, and each is individually sufficient for a BLOCKED decision:
 | Image build | pass | CI job `image` |
 | Deployment / restore / rollback drill | **not run** | no target environment |
 | Real external integrations | **not run** | no credentials |
+| Edge configuration loads and refuses | pass | `scripts/verify_edge.sh` |
+| Shipped realm imports into Keycloak, token verification | pass | `tests/integration/test_keycloak_realm.py` |
+| Shipped policy schema accepted, delegation decided | pass | `tests/integration/test_permify_engine.py` |
+| Edge TLS / mutual TLS / WAF in prevention mode | **not run** | no certificates, no deployment |
+| Identity provider operated for real staff | **not run** | no provisioned directory |
 
 ## What the tests actually prove
 
@@ -98,6 +108,65 @@ seizures and chain of custody, programme KPI reporting, observed revenue-at-risk
 signed offline revocation bundles, replay-protected offline scan synchronisation and
 deterministic explainable risk scoring. Prosecution/court filing remains unimplemented and
 is declared as such in `docs/FEATURE_CLAIMS.md`; it is not simulated.
+
+### Phase 4 evidence and deliberate limits
+
+Phase 4 adds the edge, the federated identity boundary and an external authorisation
+engine: an APISIX gateway in front of the API, a Keycloak realm the platform validates
+tokens *from*, a Permify policy engine that may narrow decisions and grant delegated
+cross-tenant reads, and a documented WAF integration point.
+
+- **The edge really loads and really refuses.** `scripts/verify_edge.sh` starts APISIX
+  against the declarative configuration in `deploy/edge/apisix.yaml` and proves, over HTTP,
+  that an oversized public verification body is rejected with 413 before it reaches the
+  application and that the public quota returns 429 once exhausted. The gateway does not
+  retry, because idempotency here is keyed rather than URL-derived, so a blind edge retry
+  would duplicate work.
+- **The edge is additional, never a substitute.** The application keeps its own
+  authentication and its own rate limits: a request that bypasses the gateway - an operator
+  port-forwarding the service - is still authenticated and still limited.
+- **The realm imports and is a real provider.** `tests/integration/test_keycloak_realm.py`
+  runs against a live Keycloak with the shipped realm and asserts the discovery document
+  advertises authorisation code with PKCE (`S256`), signs with an algorithm the verifier
+  accepts, and publishes a usable key set. A token minted by a different provider for the
+  same issuer and audience is refused, so the realm's key set is the only key set that
+  opens the API.
+- **The provider says who, never what.** A verified subject grants access only when an
+  administrator has linked it to an active principal; role, tenant and audit identity come
+  from the platform's own record. The database refuses to link one subject to two
+  principals, and refuses to federate a device at all - a handheld must keep verifying a
+  stamp while the identity provider is unreachable.
+- **Token verification is strict by construction.** Asymmetric algorithms only (`alg=none`
+  and symmetric algorithms are refused), issuer and audience enforced, `exp`/`iat`/`nbf`
+  validated with bounded leeway, required claims mandatory, unknown signing keys refused,
+  and a provider outage classified as "unavailable" rather than as a bad token. Supervisory
+  roles cannot hold a federated session without a multi-factor assertion in `amr` or `acr`.
+- **Authorisation cannot be escalated from outside.** The local role table is the policy of
+  record: the engine is consulted only after a local check has already permitted the
+  action, so no engine configuration can widen a role. `tests/integration/test_permify_engine.py`
+  proves against a live Permify that the shipped schema is accepted, that a delegated
+  reader may read the company it was granted on and not another, that delegation never
+  confers a write, and that enforcing mode refuses a subject with a permitted role but no
+  relationship.
+- **The engine fails closed, and is proven before it is trusted.** In `shadow` mode
+  disagreements are counted and the local decision stands; in `enforcing` mode an answer
+  the engine cannot give refuses the request. An outage never admits.
+- **Configuration cannot be half-applied.** An audience without an issuer, an unknown
+  authorisation mode, an engine mode without an engine, or a plaintext identity endpoint in
+  production are all refused at startup.
+
+Deliberate limits, each recorded as an outstanding condition below:
+
+- No TLS, no mutual TLS for the device fleet and no WAF are proven. The gateway
+  configuration carries the TLS and client-CA stanzas commented out because certificates do
+  not exist here; `deploy/edge/openappsec.md` is an integration point and a rollout order,
+  not a deployed WAF.
+- Nothing here is evidence of a production deployment. A Compose profile that starts three
+  containers on one host proves the code paths and the configuration; it does not prove
+  availability, and `enforcing` authorisation must not be selected until the engine is
+  operated highly available.
+- Provisioning, joiner/mover/leaver lifecycle and MFA enrolment for real staff are
+  programme activities that have not happened.
 
 ### Phase 3 evidence and deliberate limits
 
@@ -173,3 +242,12 @@ is declared as such in `docs/FEATURE_CLAIMS.md`; it is not simulated.
    implement it against that contract; today a referral is an internal record only.
 8. Exercise offline bundles and scan synchronisation on the real handheld fleet, including
    bundle distribution, expiry and reconnection after a long outage.
+9. Deploy the edge with real certificates, issue client certificates to the device fleet,
+   turn open-appsec from detection to prevention after a false-positive review, and record
+   an external penetration test against the deployed edge.
+10. Provision the identity provider for real staff with an operated joiner/mover/leaver
+    lifecycle and enforced MFA enrolment, and record the linkage of each provider subject
+    to its platform principal as an auditable administrative act.
+11. Operate the policy engine highly available, run it in `shadow` mode until
+    `taxstamp_authz_shadow_disagreements_total` is understood and stable, and only then
+    select `enforcing`.
