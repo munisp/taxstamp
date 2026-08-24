@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from taxstamp.audit import AuditRecord, record_audit_event
 from taxstamp.canonical import canonical_bytes
+from taxstamp.clock import ensure_utc
 from taxstamp.enums import (
     CLOSED_CASE_STATUSES,
     AnomalySeverity,
@@ -413,6 +414,9 @@ def settle_seizure(
     actor.require_role(*DECIDERS)
     if not reason.strip():
         raise ValidationFailed("a reason is required to change the status of seized goods")
+    # The parent case is locked first, in the same order as recording a seizure, so a
+    # settlement racing a new seizure on the same case cannot deadlock.
+    case = _locked_case_of(session, seizure_ref=seizure_ref)
     seizure = _locked_seizure(session, seizure_ref=seizure_ref)
     before = seizure_snapshot(seizure)
     try:
@@ -421,6 +425,9 @@ def settle_seizure(
         raise Conflict(str(exc)) from exc
     seizure.status = status.value
     seizure.status_reason = reason
+    # Released goods are no longer exposure: leaving the stored figure alone would keep the
+    # case, and the open-case component of the revenue-at-risk report, overstated.
+    case.revenue_at_risk_minor = _case_revenue_at_risk(session, case_id=case.id)
     session.flush()
     record_audit_event(
         session,
@@ -525,17 +532,17 @@ def _append_custody(
     last = _last_custody(session, seizure_id=seizure.id)
     sequence = 1 if last is None else last.sequence + 1
     prev_hash = GENESIS_CUSTODY_HASH if last is None else last.hash
-    document: JsonObject = {
-        "seizure_ref": seizure.seizure_ref,
-        "sequence": sequence,
-        "from_custodian": from_custodian,
-        "to_custodian": to_custodian,
-        "location": location,
-        "reason": reason,
-        "evidence_reference": evidence_reference,
-        "occurred_at": occurred_at.isoformat(),
-        "recorded_by": str(actor.principal_id),
-    }
+    document = _custody_document(
+        seizure_ref=seizure.seizure_ref,
+        sequence=sequence,
+        from_custodian=from_custodian,
+        to_custodian=to_custodian,
+        location=location,
+        reason=reason,
+        evidence_reference=evidence_reference,
+        occurred_at=occurred_at,
+        recorded_by=actor.principal_id,
+    )
     transfer = CustodyTransfer(
         seizure_id=seizure.id,
         sequence=sequence,
@@ -553,6 +560,37 @@ def _append_custody(
     session.add(transfer)
     session.flush()
     return transfer
+
+
+def _custody_document(
+    *,
+    seizure_ref: str,
+    sequence: int,
+    from_custodian: str,
+    to_custodian: str,
+    location: str,
+    reason: str,
+    evidence_reference: str,
+    occurred_at: dt.datetime,
+    recorded_by: uuid.UUID,
+) -> JsonObject:
+    """The hashed form of one handover.
+
+    ``occurred_at`` is normalised to UTC because the database returns it in UTC whatever
+    offset the caller sent: hashing the caller's offset would make an untouched chain
+    verify as broken on the next read.
+    """
+    return {
+        "seizure_ref": seizure_ref,
+        "sequence": sequence,
+        "from_custodian": from_custodian,
+        "to_custodian": to_custodian,
+        "location": location,
+        "reason": reason,
+        "evidence_reference": evidence_reference,
+        "occurred_at": ensure_utc(occurred_at).isoformat(),
+        "recorded_by": str(recorded_by),
+    }
 
 
 def custody_hash(prev_hash: str, document: JsonObject, *, secret: str) -> str:
@@ -581,17 +619,17 @@ def custody_chain_intact(session: Session, *, seizure: Seizure, secret: str) -> 
     """
     prev_hash = GENESIS_CUSTODY_HASH
     for expected_sequence, transfer in enumerate(custody_chain(session, seizure=seizure), start=1):
-        document: JsonObject = {
-            "seizure_ref": seizure.seizure_ref,
-            "sequence": transfer.sequence,
-            "from_custodian": transfer.from_custodian,
-            "to_custodian": transfer.to_custodian,
-            "location": transfer.location,
-            "reason": transfer.reason,
-            "evidence_reference": transfer.evidence_reference,
-            "occurred_at": transfer.occurred_at.isoformat(),
-            "recorded_by": str(transfer.recorded_by),
-        }
+        document = _custody_document(
+            seizure_ref=seizure.seizure_ref,
+            sequence=transfer.sequence,
+            from_custodian=transfer.from_custodian,
+            to_custodian=transfer.to_custodian,
+            location=transfer.location,
+            reason=transfer.reason,
+            evidence_reference=transfer.evidence_reference,
+            occurred_at=transfer.occurred_at,
+            recorded_by=transfer.recorded_by,
+        )
         if (
             transfer.sequence != expected_sequence
             or transfer.prev_hash != prev_hash
@@ -623,6 +661,18 @@ def _case_revenue_at_risk(session: Session, *, case_id: uuid.UUID) -> int:
         )
     ).scalar_one()
     return int(total)
+
+
+def _locked_case_of(session: Session, *, seizure_ref: str) -> EnforcementCase:
+    case = session.execute(
+        select(EnforcementCase)
+        .join(Seizure, Seizure.case_id == EnforcementCase.id)
+        .where(Seizure.seizure_ref == seizure_ref)
+        .with_for_update(of=EnforcementCase)
+    ).scalar_one_or_none()
+    if case is None:
+        raise NotFound("seizure not found", detail={"seizure_ref": seizure_ref})
+    return case
 
 
 def _locked_case(session: Session, *, case_ref: str) -> EnforcementCase:

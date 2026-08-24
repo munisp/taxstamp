@@ -443,6 +443,79 @@ def test_a_tampered_custody_record_is_detected(
     assert broken_at == first.scalars().first()
 
 
+def test_releasing_goods_removes_them_from_the_case_exposure(
+    client: TestClient, tenant: Tenant, clock: FixedClock
+) -> None:
+    _open_case(client, tenant)
+    _record_seizure(client, tenant, clock, quantity=400)
+    _record_seizure(client, tenant, clock, seizure_ref="SEIZ-0002", quantity=100)
+    released = client.post(
+        "/v1/seizures/SEIZ-0001/settlement",
+        json={"status": "released", "reason": "Documentation produced showing duty was paid"},
+        headers=auth(tenant.supervisor.token, new_key("settle")),
+    )
+    assert released.status_code == 200, released.text
+    case = client.get("/v1/cases/CASE-0001", headers=auth(tenant.analyst.token))
+    assert case.json()["revenue_at_risk_minor"] == tenant.unit_price_minor * 100
+
+    window = {
+        "start": (clock.now() - dt.timedelta(days=1)).isoformat(),
+        "end": (clock.now() + dt.timedelta(days=1)).isoformat(),
+    }
+    report = client.get("/v1/reports/revenue-at-risk", params=window, headers=auth(tenant.supervisor.token))
+    assert report.status_code == 200, report.text
+    components = {item["source"]: item["amount_minor"] for item in report.json()["components"]}
+    assert components["open_enforcement_cases"] == tenant.unit_price_minor * 100
+    assert components["goods_in_custody"] == tenant.unit_price_minor * 100
+
+
+def test_forfeited_goods_remain_in_the_case_exposure(
+    client: TestClient, tenant: Tenant, clock: FixedClock
+) -> None:
+    _open_case(client, tenant)
+    _record_seizure(client, tenant, clock, quantity=400)
+    forfeited = client.post(
+        "/v1/seizures/SEIZ-0001/settlement",
+        json={"status": "forfeited", "reason": "Forfeited to the state after an unanswered notice"},
+        headers=auth(tenant.supervisor.token, new_key("settle")),
+    )
+    assert forfeited.status_code == 200, forfeited.text
+    case = client.get("/v1/cases/CASE-0001", headers=auth(tenant.analyst.token))
+    assert case.json()["revenue_at_risk_minor"] == tenant.unit_price_minor * 400
+
+
+def test_a_custody_chain_recorded_with_an_offset_still_verifies(
+    client: TestClient,
+    tenant: Tenant,
+    clock: FixedClock,
+    runtime: Runtime,
+    session_factory: sessionmaker[Session],
+) -> None:
+    """Handovers are hashed in UTC: the database returns UTC whatever offset was sent."""
+    _open_case(client, tenant)
+    _record_seizure(client, tenant, clock)
+    lagos = dt.timezone(dt.timedelta(hours=1))
+    response = client.post(
+        "/v1/seizures/SEIZ-0001/custody",
+        json={
+            "from_custodian": "Inspector A. Bello",
+            "to_custodian": "Evidence Store, Ikeja",
+            "location": "Ikeja",
+            "reason": "Moved to the evidence store",
+            "evidence_reference": "HANDOVER-TZ",
+            "occurred_at": clock.now().astimezone(lagos).isoformat(),
+        },
+        headers=auth(tenant.analyst.token, new_key("custody")),
+    )
+    assert response.status_code == 201, response.text
+    with session_factory() as session:
+        seizure = session.execute(select(Seizure)).scalars().one()
+        intact, broken_at = enforcement_service.custody_chain_intact(
+            session, seizure=seizure, secret=runtime.settings.audit_chain_secret
+        )
+    assert (intact, broken_at) == (True, None)
+
+
 def test_cases_can_be_listed_by_status(client: TestClient, tenant: Tenant) -> None:
     _open_case(client, tenant)
     _open_case(client, tenant, case_ref="CASE-0002")

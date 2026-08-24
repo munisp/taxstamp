@@ -167,6 +167,29 @@ def test_replayed_verification_nonce_is_rejected(
     assert second.status_code == 401
 
 
+def test_a_signed_verification_with_an_unknown_field_is_a_validation_failure(
+    client: TestClient, settings: Settings, clock: FixedClock, tenant: Tenant
+) -> None:
+    """A signed body is validated after the signature check, so it must not surface a 500."""
+    body = {
+        "serial": "NG-ALC-2026-000001-X",
+        "secure_code": "ABCDEFGHJKLM",
+        "device_id": "field-device-3",
+        "nonce": "unknown-field-nonce",
+        "operator_note": "not part of the schema",
+    }
+    response = client.post(
+        "/v1/verify",
+        json=body,
+        headers={
+            **auth(tenant.device.token),
+            **signed_headers(body, secret=settings.device_hmac_secret, now=clock.now()),
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "validation_failed"
+
+
 def test_expiry_job_expires_stamps_after_validity(
     client: TestClient,
     runtime: Runtime,

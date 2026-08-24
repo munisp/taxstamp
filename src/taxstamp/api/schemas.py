@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
+from typing import TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from taxstamp.enums import (
     AnomalySeverity,
@@ -27,11 +28,29 @@ from taxstamp.enums import (
     TraceEventType,
     TradeUnitLevel,
 )
+from taxstamp.errors import ValidationFailed
+from taxstamp.jsontypes import JsonObject
 from taxstamp.serials import CATEGORY_CODES
 
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, frozen=True)
+
+
+StrictModelT = TypeVar("StrictModelT", bound=StrictModel)
+
+
+def parse_signed_body(model: type[StrictModelT], document: JsonObject) -> StrictModelT:
+    """Validate a body that was parsed for signature checking before routing.
+
+    A signed request is read and verified as raw bytes, so FastAPI never validates it and
+    a schema failure would otherwise surface as an unhandled exception rather than a 422.
+    """
+    try:
+        return model.model_validate(document)
+    except ValidationError as exc:
+        fields = sorted({".".join(str(part) for part in error["loc"]) for error in exc.errors()})
+        raise ValidationFailed("request body is not valid", detail={"fields": ", ".join(fields)}) from exc
 
 
 class IssueLicenceRequest(StrictModel):
