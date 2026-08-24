@@ -288,3 +288,41 @@ def test_requesters_only_see_their_own_licences_and_products(
 
     all_licences = client.get("/v1/licences", headers=auth(tenant.admin.token)).json()["licences"]
     assert len(all_licences) > len(licences)
+
+
+def test_a_device_credential_cannot_enumerate_the_register(
+    client: TestClient, tenant: Tenant, session_factory: sessionmaker[Session]
+) -> None:
+    """A field credential has no legitimate reason to read brands or entitlements."""
+    with session_factory() as session:
+        other = create_company(session)
+        create_licence(session, company_id=other.id)
+        create_product(session, company_id=other.id)
+        session.commit()
+
+    assert client.get("/v1/licences", headers=auth(tenant.device.token)).status_code == 403
+    assert client.get("/v1/products", headers=auth(tenant.device.token)).status_code == 403
+
+
+def test_an_operator_scoped_to_a_company_sees_only_its_own_register(
+    client: TestClient,
+    tenant: Tenant,
+    settings: Settings,
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as session:
+        other = create_company(session)
+        create_licence(session, company_id=other.id)
+        create_product(session, company_id=other.id)
+        scoped = create_identity(
+            session,
+            role=Role.OPERATOR,
+            api_token_secret=settings.api_token_secret,
+            company_id=tenant.company.id,
+        )
+        session.commit()
+
+    licences = client.get("/v1/licences", headers=auth(scoped.token)).json()["licences"]
+    products = client.get("/v1/products", headers=auth(scoped.token)).json()["products"]
+    assert {row["company_id"] for row in licences} == {str(tenant.company.id)}
+    assert {row["company_id"] for row in products} == {str(tenant.company.id)}

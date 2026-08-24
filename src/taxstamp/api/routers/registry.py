@@ -17,12 +17,16 @@ from taxstamp.api.schemas import (
     RegisterProductRequest,
 )
 from taxstamp.enums import LicenceType, Role
-from taxstamp.errors import NotFound
+from taxstamp.errors import Forbidden
 from taxstamp.jsontypes import JsonObject
 from taxstamp.models import Licence, Product
 from taxstamp.services import registry as registry_service
+from taxstamp.services.context import Actor
 
 router = APIRouter(prefix="/v1", tags=["registry"])
+
+#: Roles that supervise the register as a whole and therefore read across tenants.
+CROSS_TENANT_READERS: frozenset[Role] = frozenset({Role.ANALYST, Role.SUPERVISOR, Role.ADMIN})
 
 
 def _licence_document(licence: Licence) -> JsonObject:
@@ -39,6 +43,20 @@ def _licence_document(licence: Licence) -> JsonObject:
         "statutory_reference": licence.statutory_reference,
         "created_at": utc(licence.created_at),
     }
+
+
+def _tenant_filter(actor: Actor) -> uuid.UUID | None:
+    """The company a listing must be restricted to, or None for a supervisory reader.
+
+    Master data identifies brands, markets and entitlements, so a credential without a
+    supervisory role sees only its own company's rows and a credential with no company
+    at all sees nothing.
+    """
+    if actor.role in CROSS_TENANT_READERS:
+        return None
+    if actor.company_id is None:
+        raise Forbidden("this credential may not read the register")
+    return actor.company_id
 
 
 def _product_document(product: Product) -> JsonObject:
@@ -142,10 +160,9 @@ def list_licences(
     bounded = max(1, min(limit, 200))
     with runtime.session_factory() as session:
         query = select(Licence).order_by(Licence.created_at.desc())
-        if actor.role is Role.REQUESTER:
-            if actor.company_id is None:
-                raise NotFound("no company is associated with this credential")
-            query = query.where(Licence.company_id == actor.company_id)
+        company_id = _tenant_filter(actor)
+        if company_id is not None:
+            query = query.where(Licence.company_id == company_id)
         rows = session.execute(query.limit(bounded).offset(max(offset, 0))).scalars().all()
         return {"licences": [_licence_document(row) for row in rows], "limit": bounded}
 
@@ -233,9 +250,8 @@ def list_products(
     bounded = max(1, min(limit, 200))
     with runtime.session_factory() as session:
         query = select(Product).order_by(Product.created_at.desc())
-        if actor.role is Role.REQUESTER:
-            if actor.company_id is None:
-                raise NotFound("no company is associated with this credential")
-            query = query.where(Product.company_id == actor.company_id)
+        company_id = _tenant_filter(actor)
+        if company_id is not None:
+            query = query.where(Product.company_id == company_id)
         rows = session.execute(query.limit(bounded).offset(max(offset, 0))).scalars().all()
         return {"products": [_product_document(row) for row in rows], "limit": bounded}
