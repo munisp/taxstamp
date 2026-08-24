@@ -1,0 +1,24 @@
+# APISIX runs in standalone mode: routes come from apisix.yaml on disk, so there is no
+# admin API to secure and no etcd cluster to operate for this deployment shape.
+deployment:
+  role: data_plane
+  role_data_plane:
+    config_provider: yaml
+apisix:
+  node_listen: 9080
+  enable_admin: false
+  proxy_mode: http
+nginx_config:
+  http:
+    client_max_body_size: 1m
+plugin_attr:
+  prometheus:
+    export_addr:
+      ip: 0.0.0.0
+      port: 9091
+plugins:
+  - client-control
+  - limit-count
+  - limit-req
+  - prometheus
+  - real-ip

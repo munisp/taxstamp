@@ -88,6 +88,36 @@
   repository endpoint configured, nothing is delivered; with one configured, the outbox
   relay delivers it and the outbox is the record of whether it arrived.
 
+## Edge, identity and authorisation
+
+Start them in development with the `edge` Compose profile (APISIX on :9081, Keycloak on
+:8081, Permify on :3476), and prove the gateway actually refuses with
+`bash scripts/verify_edge.sh`. See `deploy/identity/README.md` for the realm and the
+policy schema, and `deploy/edge/openappsec.md` for the WAF integration point.
+
+- **The edge is additional, never a substitute.** The application authenticates and rate
+  limits every request itself, so a request that reaches it directly is still controlled.
+  Losing APISIX loses TLS, body caps and quotas - severe, but not an authentication bypass.
+- **Identity provider outage.** Human sessions stop; devices and service accounts are
+  unaffected, because they never use the provider. Verification, offline sync and the
+  worker keep running. A provider that cannot serve its key set is reported as unavailable
+  (503), never as a bad token, so the cause is visible in the logs.
+- **Turning on external authorisation.** Set `TAXSTAMP_AUTHZ_EXTERNAL_MODE=shadow` first
+  and watch `taxstamp_authz_shadow_disagreements_total`: a non-zero rate means the schema
+  and the local table disagree, and enforcing it would refuse real work. Only select
+  `enforcing` once the rate is understood and the engine is highly available - enforcing
+  refuses any request the engine cannot answer.
+- **Policy engine outage while enforcing.** Requests that need a decision fail closed with
+  503 and `taxstamp_authz_engine_unavailable_total` rises. Recovery is to restore the
+  engine, or to drop back to `shadow` deliberately, which is a policy decision and should
+  be recorded as one.
+- **Linking a person to a principal** is an administrative act: set `oidc_subject` on an
+  existing active principal. Never auto-provision, and never link a device - the database
+  refuses it.
+- **Revoking access** is done in both places: disable the principal (immediate, local) and
+  disable the provider account (stops new sessions). Disabling only the provider leaves any
+  unexpired token working until it expires.
+
 ## Observability
 
 - Structured JSON logs with request IDs on every request.
@@ -95,3 +125,8 @@
   stamps issued, reconciliation findings by kind.
 - Alert on: `reconciliation_findings` non-zero, readiness failures, 5xx rate, outbox
   backlog, and verification failure ratio.
+- Identity and authorisation: `taxstamp_oidc_authentications_total` by outcome (a rise in
+  `unlinked`, `disabled` or `single_factor` is either a provisioning error or an attack),
+  `taxstamp_authz_engine_unavailable_total` (fail-closed denials),
+  `taxstamp_authz_shadow_disagreements_total` (policy drift before enforcement) and
+  `taxstamp_authz_external_denials_total`.

@@ -8,10 +8,10 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, utc
+from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, authorize, utc
 from taxstamp.api.idempotent import run_idempotent
 from taxstamp.api.schemas import ApplyReceiptRequest, RefundReceiptRequest
-from taxstamp.enums import Role
+from taxstamp.authz.actions import Action
 from taxstamp.jsontypes import JsonObject
 from taxstamp.services import treasury as treasury_service
 
@@ -30,8 +30,7 @@ def _resolution_document(result: treasury_service.ResolutionResult) -> JsonObjec
 
 @router.get("/unapplied-receipts")
 def list_unapplied(runtime: RuntimeDep, current: CurrentActor, limit: int = 50) -> JsonObject:
-    actor = current.actor
-    actor.require_role(Role.TREASURY, Role.AUDITOR, Role.ADMIN)
+    authorize(runtime, current.actor, Action.TREASURY_RECEIPTS_READ)
     bounded = max(1, min(limit, 200))
     with runtime.session_factory() as session:
         receipts = treasury_service.unresolved_receipts(session, limit=bounded)

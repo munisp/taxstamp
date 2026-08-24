@@ -97,6 +97,13 @@ _STATIC: tuple[Capability, ...] = (
         "exposure is not an assessed liability and contains no extrapolation",
     ),
     Capability(
+        "edge_gateway_protection",
+        CapabilityState.REQUIRES_CONFIGURATION,
+        "APISIX routes and an open-appsec policy are declared in deploy/edge, but TLS "
+        "certificates, device client certificates and a deployed WAF are operational "
+        "prerequisites this codebase cannot satisfy or evidence",
+    ),
+    Capability(
         "prosecution_case_filing",
         CapabilityState.NOT_IMPLEMENTED,
         "No court or prosecution system is integrated; referral records the platform "
@@ -107,6 +114,22 @@ _STATIC: tuple[Capability, ...] = (
 
 def capability_report(settings: Settings) -> list[Capability]:
     dynamic = [
+        Capability(
+            "federated_human_identity",
+            CapabilityState.IMPLEMENTED if settings.oidc_issuer else CapabilityState.REQUIRES_CONFIGURATION,
+            "Provider tokens are verified against the issuer's key set and accepted only for "
+            "a principal an administrator linked; without an issuer they are refused, and "
+            "devices and service accounts never depend on the provider being reachable",
+        ),
+        Capability(
+            "external_authorisation_engine",
+            CapabilityState.IMPLEMENTED
+            if settings.permify_base_url and settings.authz_external_mode != "disabled"
+            else CapabilityState.REQUIRES_CONFIGURATION,
+            f"Mode {settings.authz_external_mode}: the local role table is the policy of record "
+            "and the engine can only confirm it or add an explicitly modelled delegated read; "
+            "an engine that cannot answer denies rather than admits",
+        ),
         Capability(
             "regulatory_compliance_check",
             CapabilityState.IMPLEMENTED if settings.firs_base_url else CapabilityState.REQUIRES_CONFIGURATION,

@@ -9,13 +9,14 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, utc
+from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, authorize, utc
 from taxstamp.api.idempotent import run_idempotent
 from taxstamp.api.schemas import (
     IssueLicenceRequest,
     LicenceStatusRequest,
     RegisterProductRequest,
 )
+from taxstamp.authz.actions import Action
 from taxstamp.enums import LicenceType
 from taxstamp.errors import Forbidden
 from taxstamp.jsontypes import JsonObject
@@ -79,6 +80,7 @@ def issue_licence(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.LICENCE_MANAGE)
 
     def work(session: Session) -> JsonObject:
         licence = registry_service.issue_licence(
@@ -120,6 +122,7 @@ def change_licence_status(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.LICENCE_MANAGE)
 
     def work(session: Session) -> JsonObject:
         licence = registry_service.change_licence_status(
@@ -172,6 +175,7 @@ def register_product(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.PRODUCT_MANAGE)
 
     def work(session: Session) -> JsonObject:
         product = registry_service.register_product(
@@ -212,6 +216,7 @@ def withdraw_product(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.PRODUCT_MANAGE)
 
     def work(session: Session) -> JsonObject:
         product = registry_service.withdraw_product(

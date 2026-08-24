@@ -15,10 +15,13 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from taxstamp.authz.permify import PermifyClient, PermifyConfig
+from taxstamp.authz.policy import ExternalMode, PolicyEngine
 from taxstamp.clock import Clock, SystemClock
 from taxstamp.config import Settings, get_settings
 from taxstamp.db import create_db_engine, create_session_factory
 from taxstamp.gates import RateLimiter, ReplayGuard
+from taxstamp.identity.oidc import OidcConfig, OidcVerifier
 from taxstamp.observability import Metrics, build_metrics
 from taxstamp.providers.anchor import AnchorService
 from taxstamp.providers.base import ProviderClient, ProviderConfig
@@ -46,6 +49,8 @@ class Runtime:
     rate_limiter: RateLimiter
     compliance: ComplianceService
     anchor: AnchorService
+    oidc: OidcVerifier
+    policy: PolicyEngine
     clock: Clock
     registry: CollectorRegistry
     metrics: Metrics
@@ -87,11 +92,22 @@ def build_runtime(
         Registry.CUSTOMS: _provider(resolved, "Customs", resolved.customs_base_url),
     }
     anchor_client = _provider(resolved, "LedgerAnchor", resolved.ledger_anchor_base_url)
+    permify = PermifyClient(
+        PermifyConfig(
+            base_url=resolved.permify_base_url,
+            tenant_id=resolved.permify_tenant_id,
+            api_key=resolved.permify_api_key,
+            timeout_seconds=resolved.permify_timeout_seconds,
+            schema_version=resolved.permify_schema_version,
+        )
+    )
     if http_client is not None:
         compliance_clients = {
             name: client.with_client(http_client) for name, client in compliance_clients.items()
         }
         anchor_client = anchor_client.with_client(http_client)
+        permify = permify.with_client(http_client)
+    metrics = build_metrics(registry)
     return Runtime(
         settings=resolved,
         engine=engine,
@@ -101,7 +117,23 @@ def build_runtime(
         rate_limiter=RateLimiter(redis, window_seconds=resolved.rate_limit_window_seconds),
         compliance=ComplianceService(compliance_clients),
         anchor=AnchorService(anchor_client),
+        oidc=OidcVerifier(
+            OidcConfig(
+                issuer=resolved.oidc_issuer,
+                audience=resolved.oidc_audience,
+                jwks_url=resolved.effective_oidc_jwks_url,
+                leeway_seconds=resolved.oidc_leeway_seconds,
+                jwks_cache_seconds=resolved.oidc_jwks_cache_seconds,
+                required_methods=resolved.oidc_mfa_method_set,
+                required_acr=resolved.oidc_mfa_acr,
+            )
+        ),
+        policy=PolicyEngine(
+            client=permify,
+            mode=ExternalMode(resolved.authz_external_mode),
+            metrics=metrics,
+        ),
         clock=clock or SystemClock(),
         registry=registry,
-        metrics=build_metrics(registry),
+        metrics=metrics,
     )

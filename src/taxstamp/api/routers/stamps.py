@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, rate_limit, utc
+from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, authorize, rate_limit, utc
 from taxstamp.api.idempotent import run_idempotent
 from taxstamp.api.schemas import (
     ActivateStampsRequest,
@@ -17,6 +17,7 @@ from taxstamp.api.schemas import (
     InspectionRequest,
     VoidStampsRequest,
 )
+from taxstamp.authz.actions import Action
 from taxstamp.enums import Role
 from taxstamp.errors import NotFound
 from taxstamp.jsontypes import JsonObject
@@ -131,8 +132,7 @@ def get_stamp(serial: str, runtime: RuntimeDep, current: CurrentActor) -> JsonOb
 
 @router.get("/batches/{batch_id}")
 def get_batch(batch_id: uuid.UUID, runtime: RuntimeDep, current: CurrentActor) -> JsonObject:
-    actor = current.actor
-    actor.require_role(Role.OPERATOR, Role.ADMIN, Role.AUDITOR, Role.REQUESTER)
+    actor = authorize(runtime, current.actor, Action.BATCH_READ)
     with runtime.session_factory() as session:
         batch = session.get(StampBatch, batch_id)
         if batch is None:
@@ -215,8 +215,7 @@ def declare_disposition(
 @router.get("/batches/{batch_id}/account")
 def batch_account(batch_id: uuid.UUID, runtime: RuntimeDep, current: CurrentActor) -> JsonObject:
     """Stamp accountability for one batch: where every issued stamp is."""
-    actor = current.actor
-    actor.require_role(Role.OPERATOR, Role.ADMIN, Role.AUDITOR, Role.REQUESTER)
+    actor = authorize(runtime, current.actor, Action.BATCH_READ)
     with runtime.session_factory() as session:
         batch = session.get(StampBatch, batch_id)
         if batch is None:

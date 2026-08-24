@@ -3,13 +3,23 @@
 Authentication is deny-by-default: a route without an explicit principal dependency
 cannot read or change tenant data, and every credential lookup is a constant-time
 comparison against a stored keyed hash.
+
+Two credential families are accepted, and which one a request used is decided by the
+shape of the bearer value, never by trying both stores:
+
+* a JWS compact token is a federated session from the configured identity provider, and
+  is accepted only when its verified subject is linked to an active principal;
+* anything else is one of the platform's own opaque tokens, which is how devices and
+  service accounts authenticate.
+
+In both cases the *platform's* principal record supplies the role, the tenant and the
+audit identity. The provider says who someone is; it never says what they may do.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 import uuid
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -17,11 +27,13 @@ from fastapi import Depends, Header, Request
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from taxstamp.authz.actions import Action
 from taxstamp.canonical import canonical_hash
 from taxstamp.enums import Role
-from taxstamp.errors import Forbidden, Unauthenticated, ValidationFailed
+from taxstamp.errors import Unauthenticated, ValidationFailed
+from taxstamp.identity.oidc import looks_like_jwt
 from taxstamp.jsontypes import JsonObject
-from taxstamp.models import Credential
+from taxstamp.models import Credential, Principal
 from taxstamp.runtime import Runtime
 from taxstamp.security import hash_token
 from taxstamp.services.context import Actor
@@ -47,7 +59,10 @@ def request_id(request: Request) -> str:
 @dataclass(frozen=True, slots=True)
 class AuthenticatedActor:
     actor: Actor
-    credential_id: uuid.UUID
+    #: The platform credential used, or None for a federated session.
+    credential_id: uuid.UUID | None
+    #: True when the identity came from the external provider.
+    federated: bool = False
 
 
 def _parse_bearer(authorization: str | None) -> str:
@@ -65,6 +80,58 @@ def authenticate(
 ) -> AuthenticatedActor:
     runtime = get_runtime(request)
     token = _parse_bearer(authorization)
+    if looks_like_jwt(token):
+        return _authenticate_federated(runtime, request, token)
+    return _authenticate_platform(runtime, request, token)
+
+
+def _authenticate_federated(
+    runtime: Runtime,
+    request: Request,
+    token: str,
+) -> AuthenticatedActor:
+    """Accept a provider session for an explicitly linked, active principal."""
+    metrics = runtime.metrics
+    try:
+        identity = runtime.oidc.verify(token)
+    except Unauthenticated:
+        metrics["oidc_authentications"].labels(outcome="rejected").inc()
+        raise
+    with runtime.session_factory() as session:
+        principal = session.execute(
+            select(Principal).where(Principal.oidc_subject == identity.subject)
+        ).scalar_one_or_none()
+        if principal is None:
+            metrics["oidc_authentications"].labels(outcome="unlinked").inc()
+            raise Unauthenticated("federated identity is not linked to a principal")
+        if not principal.active:
+            metrics["oidc_authentications"].labels(outcome="disabled").inc()
+            raise Unauthenticated("principal is disabled")
+        role = Role(principal.role)
+        if role.value in runtime.settings.oidc_mfa_role_set and not identity.satisfies_multi_factor(
+            required_methods=runtime.settings.oidc_mfa_method_set,
+            required_acr=runtime.settings.oidc_mfa_acr,
+        ):
+            metrics["oidc_authentications"].labels(outcome="single_factor").inc()
+            raise Unauthenticated(
+                "this role requires a multi-factor session",
+            )
+        metrics["oidc_authentications"].labels(outcome="accepted").inc()
+        actor = Actor(
+            principal_id=principal.id,
+            subject=principal.subject,
+            role=role,
+            company_id=principal.company_id,
+            request_id=request_id(request),
+        )
+        return AuthenticatedActor(actor=actor, credential_id=None, federated=True)
+
+
+def _authenticate_platform(
+    runtime: Runtime,
+    request: Request,
+    token: str,
+) -> AuthenticatedActor:
     token_hash = hash_token(token, secret=runtime.settings.api_token_secret)
     now = runtime.clock.now()
     with runtime.session_factory() as session:
@@ -96,16 +163,15 @@ CurrentActor = Annotated[AuthenticatedActor, Depends(authenticate)]
 RuntimeDep = Annotated[Runtime, Depends(get_runtime)]
 
 
-def require_roles(*roles: Role) -> Callable[[AuthenticatedActor], Actor]:
-    def dependency(current: CurrentActor) -> Actor:
-        if current.actor.role not in roles:
-            raise Forbidden(
-                "this credential may not perform this action",
-                detail={"required": ",".join(role.value for role in roles)},
-            )
-        return current.actor
-
-    return dependency
+def authorize(runtime: Runtime, actor: Actor, action: Action) -> Actor:
+    """Apply the authorisation table, and the policy engine when one is enforcing."""
+    runtime.policy.authorize(
+        action=action,
+        role=actor.role,
+        subject_id=actor.principal_id,
+        company_id=actor.company_id,
+    )
+    return actor
 
 
 def idempotency_key(

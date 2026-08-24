@@ -56,6 +56,8 @@ credentials and an authoritative rate/rule source.
 
 ```
 src/taxstamp/            application: config, money, domain services, API, worker, CLI
+deploy/edge              gateway configuration and the WAF integration point
+deploy/identity          identity realm and delegated-authorisation schema
 migrations/              Alembic revisions (append-only triggers, balanced-journal check)
 tests/unit               pure logic
 tests/integration        real PostgreSQL, Redis and a real HTTP registry sandbox
@@ -74,6 +76,15 @@ cp .env.example .env      # then set real local values
 make migrate
 make run                  # API on :8080
 make worker               # outbox relay, expiry, reconciliation
+```
+
+The edge, identity provider and policy engine are optional in development and off by
+default - an unconfigured identity provider refuses provider tokens rather than trusting
+them, and external authorisation starts `disabled`:
+
+```bash
+docker compose --profile edge up -d      # APISIX :9081, Keycloak :8081, Permify :3476
+bash scripts/verify_edge.sh              # proves the gateway caps bodies and quotas
 ```
 
 ## Quality gates

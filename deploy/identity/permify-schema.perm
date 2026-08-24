@@ -1,0 +1,45 @@
+// Permify schema for delegated access the platform's role table cannot express.
+//
+// The division of labour matters. The platform's local role table
+// (src/taxstamp/authz/actions.py) is the policy of record for *write* privileges: this
+// schema can never widen them, because the policy engine is consulted only after a local
+// role check has already permitted the action. What this schema adds is delegation of
+// *reads* across tenant boundaries - an auditor engaged for one manufacturer, a
+// prosecutor granted sight of one case - which is a relationship, not a role, and which
+// changes far too often to live in a deployment.
+
+entity user {}
+
+entity company {
+    // Staff of the company itself.
+    relation member @user
+    // An external party explicitly granted sight of this company's stamps, batches and
+    // risk positions. Grant is per company and revocable by removing the tuple.
+    relation delegated_reader @user
+    // A supervisor of the programme, not of the company.
+    relation regulator @user
+
+    permission read_stamps  = member or delegated_reader or regulator
+    permission read_batches = member or delegated_reader or regulator
+    permission read_risk    = delegated_reader or regulator
+    permission export       = regulator or delegated_reader
+}
+
+entity case {
+    relation owner @user
+    relation investigator @user
+    relation supervisor @user
+    // Counsel or an external prosecutor, granted per case.
+    relation delegated_reader @user
+
+    permission read   = owner or investigator or supervisor or delegated_reader
+    permission decide = supervisor
+}
+
+entity programme {
+    relation auditor @user
+    relation supervisor @user
+
+    permission report = auditor or supervisor
+    permission export = auditor or supervisor
+}

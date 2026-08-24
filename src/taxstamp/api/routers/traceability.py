@@ -9,7 +9,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep
+from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, authorize
 from taxstamp.api.idempotent import run_idempotent
 from taxstamp.api.schemas import (
     AggregateRequest,
@@ -17,6 +17,7 @@ from taxstamp.api.schemas import (
     RegisterFacilityRequest,
     TraceEventRequest,
 )
+from taxstamp.authz.actions import Action
 from taxstamp.enums import FacilityKind, TraceEventType, TradeUnitLevel
 from taxstamp.errors import ValidationFailed
 from taxstamp.jsontypes import JsonObject
@@ -36,6 +37,7 @@ def register_facility(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.TRACE_RECORD)
 
     def work(session: Session) -> JsonObject:
         facility = trace_service.register_facility(
@@ -78,6 +80,7 @@ def aggregate_unit(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.TRACE_RECORD)
 
     def work(session: Session) -> JsonObject:
         unit = trace_service.aggregate(
@@ -118,6 +121,7 @@ def disaggregate_unit(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.TRACE_RECORD)
 
     def work(session: Session) -> JsonObject:
         unit = trace_service.disaggregate(
@@ -151,6 +155,7 @@ def record_trace_event(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.TRACE_RECORD)
 
     def work(session: Session) -> JsonObject:
         result = trace_service.record_trace_event(

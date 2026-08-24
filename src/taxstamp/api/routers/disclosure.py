@@ -6,9 +6,10 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep
+from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, authorize
 from taxstamp.api.idempotent import run_idempotent
 from taxstamp.api.schemas import PortabilityExportRequest, RegulatorExportRequest
+from taxstamp.authz.actions import Action
 from taxstamp.errors import ValidationFailed
 from taxstamp.jsontypes import JsonObject
 from taxstamp.retention import retention_policy_document
@@ -39,6 +40,7 @@ def create_portability_export(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.EXPORT_PORTABILITY)
 
     def work(session: Session) -> JsonObject:
         result = export_service.portability_export(
@@ -73,6 +75,7 @@ def create_regulator_export(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.EXPORT_REGULATOR)
 
     def work(session: Session) -> JsonObject:
         result = export_service.regulator_export(
@@ -119,6 +122,7 @@ def publish_checkpoint(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.CHECKPOINT_PUBLISH)
 
     def work(session: Session) -> JsonObject:
         checkpoint = transparency_service.publish_checkpoint(

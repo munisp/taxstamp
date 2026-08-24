@@ -1,0 +1,108 @@
+# APISIX standalone (declarative) configuration for the tax-stamp API edge.
+#
+# What the edge is responsible for, and the application is not:
+#   * TLS termination, and mutual TLS for the field-device fleet;
+#   * request body size caps, so an oversized body never reaches application memory;
+#   * per-route request quotas, most importantly on the unauthenticated public verify
+#     endpoint, which is the only route a member of the public can reach;
+#   * dropping requests the WAF rejects (see openappsec.yaml).
+#
+# The application keeps its own rate limits and its own authentication. The edge is an
+# additional layer, never a replacement: a request that bypasses APISIX (an operator
+# port-forwarding the service, say) is still authenticated and still rate limited.
+#
+# This file is the development wiring. It is NOT evidence that a production edge exists:
+# that needs real certificates, a real deployment and a penetration test.
+routes:
+  # Unauthenticated consumer verification. Tightest quota, smallest body, no upstream
+  # credential of any kind.
+  - id: public-verify
+    uri: /v1/public/verify
+    methods: [POST]
+    upstream_id: taxstamp-api
+    plugins:
+      client-control:
+        max_body_size: 4096
+      limit-count:
+        count: 30
+        time_window: 60
+        key_type: var
+        key: remote_addr
+        rejected_code: 429
+        policy: redis
+        redis_host: redis
+        redis_port: 6379
+        redis_timeout: 200
+      limit-req:
+        rate: 5
+        burst: 10
+        key_type: var
+        key: remote_addr
+        rejected_code: 429
+
+  # Field devices. These routes are where mutual TLS belongs once a client CA exists (see
+  # the TLS block below, inert until certificates are supplied), because a handheld's
+  # client certificate is the only thing that distinguishes the fleet from the open
+  # internet at the edge; the HMAC signature on the body remains the authoritative check
+  # inside the application either way.
+  - id: device-traffic
+    uris:
+      - /v1/verifications
+      - /v1/offline/scans
+      - /v1/offline/bundles/latest
+    upstream_id: taxstamp-api
+    plugins:
+      client-control:
+        max_body_size: 262144
+      limit-count:
+        count: 600
+        time_window: 60
+        key_type: var
+        key: http_authorization
+        rejected_code: 429
+        policy: redis
+        redis_host: redis
+        redis_port: 6379
+
+  # Everything else: portal, regulator console and operations traffic.
+  - id: api
+    uri: /*
+    upstream_id: taxstamp-api
+    plugins:
+      client-control:
+        max_body_size: 1048576
+      limit-count:
+        count: 1200
+        time_window: 60
+        key_type: var
+        key: remote_addr
+        rejected_code: 429
+        policy: redis
+        redis_host: redis
+        redis_port: 6379
+
+upstreams:
+  - id: taxstamp-api
+    type: roundrobin
+    retries: 0 # Retrying a write at the edge would duplicate it; the API is idempotent
+    # by key, not by URL, so replaying blindly is not safe.
+    nodes:
+      "api:8080": 1
+    checks:
+      active:
+        type: http
+        http_path: /readyz
+        healthy: {interval: 5, successes: 1}
+        unhealthy: {interval: 5, http_failures: 2}
+
+# TLS. In development the certificate below is absent and APISIX serves plain HTTP on
+# 9080; production must supply a real certificate and a client CA for the device fleet.
+#ssls:
+#  - id: edge
+#    snis: ["stamps.example.gov"]
+#    cert: "@/usr/local/apisix/conf/cert/edge.pem"
+#    key: "@/usr/local/apisix/conf/cert/edge.key"
+#    client:
+#      ca: "@/usr/local/apisix/conf/cert/device-ca.pem"
+#      depth: 2
+#END

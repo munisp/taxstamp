@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep
+from taxstamp.api.deps import CurrentActor, IdempotencyKey, RuntimeDep, authorize
 from taxstamp.api.idempotent import run_idempotent
 from taxstamp.api.schemas import (
     CaseDecisionRequest,
@@ -18,6 +18,7 @@ from taxstamp.api.schemas import (
     RecordSeizureRequest,
     SeizureSettlementRequest,
 )
+from taxstamp.authz.actions import Action
 from taxstamp.enums import CaseStatus
 from taxstamp.jsontypes import JsonObject
 from taxstamp.services import enforcement as enforcement_service
@@ -33,6 +34,7 @@ def open_case(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.CASE_OPEN)
 
     def work(session: Session) -> JsonObject:
         case = enforcement_service.open_case(
@@ -75,6 +77,7 @@ def attach_evidence(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.CASE_OPEN)
 
     def work(session: Session) -> JsonObject:
         enforcement_service.attach_evidence(
@@ -116,6 +119,7 @@ def decide_case(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.CASE_DECIDE)
 
     def work(session: Session) -> JsonObject:
         case = enforcement_service.decide_case(
@@ -153,6 +157,7 @@ def record_seizure(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.SEIZURE_RECORD)
 
     def work(session: Session) -> JsonObject:
         enforcement_service.record_seizure(
@@ -199,6 +204,7 @@ def transfer_custody(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.CUSTODY_TRANSFER)
 
     def work(session: Session) -> JsonObject:
         transfer = enforcement_service.transfer_custody(
@@ -246,6 +252,7 @@ def settle_seizure(
     key: IdempotencyKey,
 ) -> JSONResponse:
     actor = current.actor
+    authorize(runtime, actor, Action.SEIZURE_RECORD)
 
     def work(session: Session) -> JsonObject:
         seizure = enforcement_service.settle_seizure(

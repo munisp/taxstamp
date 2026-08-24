@@ -70,6 +70,11 @@ class Metrics(TypedDict):
     stamps_issued: Counter
     money_posted: Counter
     reconciliation_findings: Gauge
+    authz_shadow_disagreements: Counter
+    authz_external_denials: Counter
+    authz_delegated_grants: Counter
+    authz_engine_unavailable: Counter
+    oidc_authentications: Counter
 
 
 def build_metrics(registry: CollectorRegistry) -> Metrics:
@@ -117,6 +122,36 @@ def build_metrics(registry: CollectorRegistry) -> Metrics:
             "taxstamp_reconciliation_findings",
             "Open reconciliation findings by kind",
             ["kind"],
+            registry=registry,
+        ),
+        authz_shadow_disagreements=Counter(
+            "taxstamp_authz_shadow_disagreements_total",
+            "Actions the external policy engine would have refused while in shadow mode",
+            ["action"],
+            registry=registry,
+        ),
+        authz_external_denials=Counter(
+            "taxstamp_authz_external_denials_total",
+            "Locally permitted actions refused by the external policy engine",
+            ["action"],
+            registry=registry,
+        ),
+        authz_delegated_grants=Counter(
+            "taxstamp_authz_delegated_grants_total",
+            "Cross-tenant reads granted by an explicit delegation relationship",
+            ["action"],
+            registry=registry,
+        ),
+        authz_engine_unavailable=Counter(
+            "taxstamp_authz_engine_unavailable_total",
+            "Requests refused because the enforcing policy engine could not answer",
+            ["action"],
+            registry=registry,
+        ),
+        oidc_authentications=Counter(
+            "taxstamp_oidc_authentications_total",
+            "Federated authentication attempts by outcome",
+            ["outcome"],
             registry=registry,
         ),
     )
