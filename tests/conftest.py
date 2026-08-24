@@ -47,6 +47,9 @@ SECRETS = {
     "audit_chain_secret": "test-audit-chain-secret-" + "d" * 40,
     "export_signing_secret": "test-export-signing-secret-" + "e" * 40,
     "transparency_signing_secret": "test-transparency-signing-secret-" + "f" * 40,
+    "offline_signing_secret": "test-offline-signing-secret-" + "g" * 40,
+    "offline_filter_secret": "test-offline-filter-secret-" + "i" * 40,
+    "consumer_fingerprint_secret": "test-consumer-fingerprint-secret-" + "h" * 40,
 }
 CLOCK_START = dt.datetime(2026, 3, 1, 12, 0, tzinfo=dt.UTC)
 

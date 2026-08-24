@@ -48,6 +48,31 @@
 | Anomaly queue growing (`GET /v1/anomalies`) | Findings are deterministic contradictions, not scores. Work each one from its stored evidence and rule version; an impossible-travel finding usually means either a mis-keyed facility or a cloned mark. |
 | `overlapping_tariff` finding | Two rates cover the same category and date, so pricing is ambiguous. Close the earlier rate's effective period; new overlapping rates are refused at entry. |
 
+## Offline verification
+
+- Publish a bundle with `POST /v1/offline/bundles` and distribute the latest
+  (`GET /v1/offline/bundles/latest`) to field devices. Each bundle is signed, carries a
+  monotonic sequence and expires at `valid_until`; a device holding an expired bundle must
+  refuse to rely on it rather than fall back to trusting the mark.
+- A filter hit means "possibly revoked" and must be escalated to an online check. A miss
+  means only "not on this revocation list" — never treat it as proof of authenticity.
+- The signing key and the filter key are separate secrets
+  (`TAXSTAMP_OFFLINE_SIGNING_SECRET`, `TAXSTAMP_OFFLINE_FILTER_SECRET`). Rotate them
+  independently; a distributed bundle discloses neither. After rotating the signing key,
+  publish a new bundle immediately, because devices reject signatures they cannot verify.
+- Scans returned by a device are advisory: the server re-decides each one. A batch replayed
+  with identical contents is idempotent; the same `(device, sequence)` with different
+  contents is refused as a conflict and must be investigated rather than renumbered.
+
+## Enforcement
+
+| Symptom | Action |
+| --- | --- |
+| A case cannot be closed | Goods are still held under it. Settle each seizure (release, destruction or forfeiture, with a reason) first; closure while goods remain in custody is refused by design. |
+| A custody chain fails verification | Treat as a security incident: the append-only trigger must have been bypassed. The verification response names the first broken sequence number — preserve the database, snapshot it, and escalate. |
+| An officer cannot refer or close their own case | Intended: the officer who opened a case may not decide it. Route the decision to another supervisor. |
+| Consumer verification failures rising for one serial | Look for a velocity finding: many distinct clients checking one serial usually means a cloned mark, not a device fault. |
+
 ## Retention, legal hold and portability
 
 - The published policy is served from `GET /v1/retention-policy`; expiry is archive-only and

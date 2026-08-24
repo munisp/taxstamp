@@ -22,9 +22,15 @@ environment, and each is individually sufficient for a BLOCKED decision:
    upgrade/downgrade/upgrade against a real database, and the image builds, but no target
    environment was available for a deployment, backup-restore or rollback drill.
 5. **Capabilities declared unavailable.** Image/ML authenticity, printer control,
-   holographic verification and offline sync are not implemented. They are refused at
-   runtime rather than simulated, which is safe but means those business requirements are
-   unmet.
+   holographic verification and prosecution/court filing are not implemented. They are
+   refused at runtime rather than simulated, which is safe but means those business
+   requirements are unmet.
+6. **No enforcement-authority evidence.** A prosecution referral is recorded internally
+   only. Nothing has been filed with, or acknowledged by, any prosecuting authority, and
+   the platform never claims otherwise.
+7. **No field-device evidence.** Offline bundles and scan synchronisation are verified over
+   HTTP against this service; no handheld scanner fleet has been exercised, so the
+   distribution and staleness behaviour is untested on real devices.
 
 ## Gates and evidence
 
@@ -32,11 +38,11 @@ environment, and each is individually sufficient for a BLOCKED decision:
 | --- | --- | --- |
 | Formatting | pass | `evidence/format.log` |
 | Lint (ruff, security rules enabled) | pass | `evidence/lint.log` |
-| Strict typing (mypy strict, no explicit `Any`) | pass, 57 files | `evidence/type.log` |
+| Strict typing (mypy strict, no explicit `Any`) | pass | `evidence/type.log` |
 | Static security scan (bandit) | pass, no findings | `evidence/security.log` |
 | Dependency advisories (pip-audit, strict) | pass, none known | `evidence/audit-deps.log` |
-| Tests | pass, 133 tests | `evidence/tests.log` |
-| Coverage | 89% overall, branch coverage on | `evidence/tests.log` |
+| Tests | pass | `evidence/tests.log` |
+| Coverage | branch coverage on, threshold enforced | `evidence/tests.log` |
 | Import / entry points | pass | `evidence/import-check.log` |
 | Migration upgrade → downgrade → upgrade | pass | `tests/integration/test_migrations.py`, CI job `quality` |
 | Image build | pass | CI job `image` |
@@ -87,9 +93,46 @@ regulator export states that no delivery occurred when no repository endpoint is
 configured, and a checkpoint states that it is not externally anchored when no anchor
 endpoint is configured.
 
-Consumer verification, enforcement cases, KPI reporting, offline verification bundles and
-risk analytics remain unimplemented and are declared as such in `docs/FEATURE_CLAIMS.md`;
-none of them is simulated.
+Phase 3 adds a public consumer verification channel, enforcement case management with
+seizures and chain of custody, programme KPI reporting, observed revenue-at-risk analytics,
+signed offline revocation bundles, replay-protected offline scan synchronisation and
+deterministic explainable risk scoring. Prosecution/court filing remains unimplemented and
+is declared as such in `docs/FEATURE_CLAIMS.md`; it is not simulated.
+
+### Phase 3 evidence and deliberate limits
+
+- **Consumer channel discloses nothing confidential.** The public answer carries only the
+  outcome, brand, category and intended market; company, order, licence and movement data
+  are absent by construction. Attempts are recorded against a keyed pseudonymous
+  fingerprint rather than the caller's address, and the endpoint is rate limited per
+  client. Authenticity is never asserted from an image or a confidence score.
+- **Separation of enforcement powers.** An investigator may open a case and attach
+  evidence; only a supervisor or admin may refer or close one, and never the officer who
+  opened it. Evidence must reference a record that exists (witness statements excepted),
+  is append-only, and a case cannot close while goods remain in custody.
+- **Custody is chained.** Each handover is sequence-numbered and hash-chained to its
+  predecessor; a forced edit made with the append-only trigger disabled is detected and the
+  first broken sequence is identified. Handovers must start from the current custodian, run
+  forward in time, and stop once goods leave custody.
+- **Seizure duty is priced at the tariff effective when the goods were taken**, in exact
+  minor units, not at today's rate.
+- **Reporting cannot double count.** Windows are half-open, verified by two adjacent
+  windows over the same instant. Every figure states its basis.
+- **Revenue at risk is exposure, not a receivable.** It is itemised by evidence source,
+  never presented as a single deduplicated liability, states that components may overlap,
+  and contains no extrapolation to unobserved trade.
+- **Offline answers are one-sided.** The revocation filter can produce a false "possibly
+  revoked" but never a false "clean"; a negative answer is documented in the bundle itself
+  as proving only "not on this revocation list". Bundles are signed, sequenced and bounded
+  by `valid_until`; the signing key and the filter key are separate, so possession of a
+  distributed bundle does not permit minting one.
+- **Device verdicts are never trusted.** Synchronisation re-decides every scan server-side;
+  a batch replayed identically is idempotent, the same sequence with different contents is
+  a conflict, reused nonces are counted as duplicates, and stale or future captures are
+  refused.
+- **Risk scores are reproducible.** Deterministic weighted counts of stored records with a
+  per-factor cap, a versioned rule set, a stated observation window and an explanation per
+  contribution. No learned parameters exist anywhere in the codebase.
 
 ### Phase 2 evidence
 
@@ -126,3 +169,7 @@ none of them is simulated.
 6. Reconcile the local licence register against the issuing authority's register; licences
    are currently operator-entered with a statutory reference and are not externally
    confirmed.
+7. Agree with the prosecuting authority how a referral is transmitted and acknowledged, and
+   implement it against that contract; today a referral is an internal record only.
+8. Exercise offline bundles and scan synchronisation on the real handheld fleet, including
+   bundle distribution, expiry and reconnection after a long outage.

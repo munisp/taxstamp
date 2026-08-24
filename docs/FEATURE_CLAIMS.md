@@ -39,7 +39,13 @@ code path pretends otherwise).
 | Image / ML stamp authenticity | not implemented | declared unavailable in `capabilities.py`; no confidence score is produced anywhere |
 | Printer production control (HP / Zebra / Atlantic Zeiser / Kurz) | not implemented | declared unavailable; no device driver is present |
 | Holographic / taggant verification | not implemented | declared unavailable |
-| Offline verification sync | not implemented | declared unavailable |
+| Offline verification sync | implemented | `services/offline.py`, `tests/e2e/test_offline_api.py`, `tests/unit/test_bloom.py`; bundles are signed and sequenced, the filter is one-sided (a negative answer proves only "not revoked"), and every synchronised scan is re-decided server-side |
+| Consumer verification channel | implemented | `services/verification.py`, `tests/e2e/test_consumer_api.py`; public, rate-limited, discloses no company, order or licence data, records a keyed fingerprint rather than the caller address, and never asserts authenticity from an image |
+| Enforcement case management, seizures and chain of custody | implemented | `services/enforcement.py`, `tests/e2e/test_enforcement_api.py`; explicit state machines, the officer who opens a case cannot refer or close it, evidence must reference a real record, and custody is a hash-chained sequence whose tampering is detectable |
+| Revenue and compliance KPI reporting | implemented | `services/reporting.py`, `tests/e2e/test_reports_api.py`; half-open windows so adjacent reports cannot double count, exact integer minor units, each figure stating its basis |
+| Revenue-at-risk analytics | implemented (observed exposure only) | `services/reporting.py`; itemised by evidence source, never summed into a headline liability, and explicitly not extrapolated to unobserved trade |
+| Explainable risk scoring | implemented | `services/risk.py`, `tests/e2e/test_reports_api.py`; deterministic weighted counts of stored records with a per-factor cap, a versioned rule set and an explanation per contribution — no learned model |
+| Prosecution / court case filing | not implemented | declared unavailable in `capabilities.py`; a referral is recorded internally and no filing with any external authority is claimed |
 | Blockchain registration as a system of record | not implemented | only external anchoring of a Merkle root, and only when configured |
 
 ## Market-parity capabilities not yet built
@@ -49,8 +55,7 @@ Art. 8 and EU Implementing Regulation 2018/574. These are scheduled, not claimed
 
 | Capability | Status |
 | --- | --- |
-| Consumer verification channel | not implemented |
-| Enforcement case management | not implemented |
-| Revenue and compliance KPI reporting | not implemented |
-| Offline verification bundles | not implemented |
-| Explainable risk scoring and revenue-at-risk analytics | not implemented |
+| Prosecution / court case filing | not implemented; no interface to any prosecuting authority exists |
+| GS1 conformance certification of the EPCIS export | not implemented; shape only, no company prefix |
+| Image, holographic and taggant authentication | not implemented; no such claim is made anywhere |
+| Printer and production-line control | not implemented |

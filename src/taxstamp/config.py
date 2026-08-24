@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     audit_chain_secret: str
     export_signing_secret: str
     transparency_signing_secret: str
+    #: Signs offline revocation bundles. A device trusts a bundle only under this key, so
+    #: it cannot be handed a forged revocation list.
+    offline_signing_secret: str
+    #: Keys the revocation Bloom filter. Separate from the signing key: a distributed
+    #: bundle discloses filter membership to whoever holds this key, and that must not
+    #: also let them mint bundles.
+    offline_filter_secret: str
+    #: Keys the pseudonymous fingerprint of a consumer's address. Rotating it severs the
+    #: link between past and future consumer checks, which is why it is separate.
+    consumer_fingerprint_secret: str
 
     require_tls: bool = True
     cors_allowed_origins: str = ""
@@ -64,6 +74,14 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=3_600)
     rate_limit_default: int = Field(default=600, ge=1)
     rate_limit_verify: int = Field(default=1_200, ge=1)
+    #: Consumer checks are unauthenticated, so they are limited per client address.
+    rate_limit_consumer_verify: int = Field(default=30, ge=1)
+
+    # Offline operation.
+    offline_bundle_ttl_hours: int = Field(default=24, ge=1, le=168)
+    #: How old a captured scan may be when a device finally reconnects. Beyond this the
+    #: batch is refused rather than backdated into the register.
+    offline_sync_max_staleness_hours: int = Field(default=72, ge=1, le=720)
 
     # Issuance policy.
     max_order_quantity: int = Field(default=5_000_000, ge=1)
@@ -97,6 +115,9 @@ class Settings(BaseSettings):
         "audit_chain_secret",
         "export_signing_secret",
         "transparency_signing_secret",
+        "offline_signing_secret",
+        "offline_filter_secret",
+        "consumer_fingerprint_secret",
     )
     @classmethod
     def _validate_secret(cls, value: str) -> str:
@@ -128,6 +149,9 @@ class Settings(BaseSettings):
                 "audit_chain_secret": self.audit_chain_secret,
                 "export_signing_secret": self.export_signing_secret,
                 "transparency_signing_secret": self.transparency_signing_secret,
+                "offline_signing_secret": self.offline_signing_secret,
+                "offline_filter_secret": self.offline_filter_secret,
+                "consumer_fingerprint_secret": self.consumer_fingerprint_secret,
             }
             for name, value in secrets.items():
                 if _PLACEHOLDER.search(value):

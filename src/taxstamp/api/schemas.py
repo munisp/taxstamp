@@ -12,13 +12,18 @@ import uuid
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from taxstamp.enums import (
+    AnomalySeverity,
     ApprovalDecision,
     ApprovalLevel,
+    CaseKind,
+    CaseStatus,
     CustomsRegime,
     DispositionKind,
+    EvidenceKind,
     FacilityKind,
     LicenceStatus,
     LicenceType,
+    SeizureStatus,
     TraceEventType,
     TradeUnitLevel,
 )
@@ -257,4 +262,122 @@ class RegulatorExportRequest(StrictModel):
         for moment in (self.occurred_from, self.occurred_to):
             if moment is not None and moment.tzinfo is None:
                 raise ValueError("export window bounds must include a timezone offset")
+        return self
+
+
+class ConsumerVerifyRequest(StrictModel):
+    """What a member of the public sends. No device identity, no location.
+
+    A consumer cannot be asked to sign a request, so this endpoint is unauthenticated and
+    rate limited per client address instead. The reported state is free text the consumer
+    chooses, used only to see where suspect packs surface.
+    """
+
+    serial: str = Field(min_length=8, max_length=64)
+    secure_code: str = Field(min_length=6, max_length=32)
+    reported_state: str = Field(default="", max_length=64)
+
+
+class OpenCaseRequest(StrictModel):
+    case_ref: str = Field(min_length=4, max_length=64)
+    kind: CaseKind
+    severity: AnomalySeverity
+    summary: str = Field(min_length=10, max_length=500)
+    company_id: uuid.UUID | None = None
+    product_category: str = Field(default="", max_length=64)
+
+    @field_validator("product_category")
+    @classmethod
+    def _known_category(cls, value: str) -> str:
+        if value and value not in CATEGORY_CODES:
+            raise ValueError(f"unsupported product category: {value}")
+        return value
+
+
+class CaseEvidenceRequest(StrictModel):
+    kind: EvidenceKind
+    reference: str = Field(min_length=3, max_length=128)
+    detail: dict[str, str] = Field(default_factory=dict)
+
+
+class CaseDecisionRequest(StrictModel):
+    status: CaseStatus
+    reason: str = Field(min_length=10, max_length=500)
+
+
+class RecordSeizureRequest(StrictModel):
+    seizure_ref: str = Field(min_length=4, max_length=64)
+    location: str = Field(min_length=3, max_length=255)
+    description: str = Field(min_length=10, max_length=500)
+    product_category: str = Field(min_length=2, max_length=64)
+    seized_quantity: int = Field(gt=0, le=100_000_000)
+    custodian: str = Field(min_length=3, max_length=255)
+    seized_at: dt.datetime
+    facility_code: str | None = Field(default=None, min_length=3, max_length=64)
+
+    @field_validator("product_category")
+    @classmethod
+    def _known_category(cls, value: str) -> str:
+        if value not in CATEGORY_CODES:
+            raise ValueError(f"unsupported product category: {value}")
+        return value
+
+    @field_validator("seized_at")
+    @classmethod
+    def _aware_seizure(cls, value: dt.datetime) -> dt.datetime:
+        if value.tzinfo is None:
+            raise ValueError("seized_at must include a timezone offset")
+        return value
+
+
+class CustodyTransferRequest(StrictModel):
+    from_custodian: str = Field(min_length=3, max_length=255)
+    to_custodian: str = Field(min_length=3, max_length=255)
+    location: str = Field(min_length=3, max_length=255)
+    reason: str = Field(min_length=3, max_length=500)
+    evidence_reference: str = Field(min_length=3, max_length=128)
+    occurred_at: dt.datetime
+
+    @model_validator(mode="after")
+    def _distinct_custodians(self) -> CustodyTransferRequest:
+        if self.from_custodian == self.to_custodian:
+            raise ValueError("a handover must name two different custodians")
+        if self.occurred_at.tzinfo is None:
+            raise ValueError("occurred_at must include a timezone offset")
+        return self
+
+
+class SeizureSettlementRequest(StrictModel):
+    status: SeizureStatus
+    reason: str = Field(min_length=10, max_length=500)
+
+
+class OfflineScanRequest(StrictModel):
+    serial: str = Field(min_length=8, max_length=64)
+    secure_code: str = Field(min_length=6, max_length=32)
+    nonce: str = Field(min_length=8, max_length=64)
+    captured_at: dt.datetime
+    latitude_e7: int | None = Field(default=None, ge=-900_000_000, le=900_000_000)
+    longitude_e7: int | None = Field(default=None, ge=-1_800_000_000, le=1_800_000_000)
+
+    @field_validator("captured_at")
+    @classmethod
+    def _aware_capture(cls, value: dt.datetime) -> dt.datetime:
+        if value.tzinfo is None:
+            raise ValueError("captured_at must include a timezone offset")
+        return value
+
+
+class OfflineSyncRequest(StrictModel):
+    """A device's captured batch. The batch sequence is what makes a replay detectable."""
+
+    device_id: str = Field(min_length=3, max_length=64)
+    batch_sequence: int = Field(ge=1, le=1_000_000_000)
+    scans: list[OfflineScanRequest] = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def _unique_nonces(self) -> OfflineSyncRequest:
+        nonces = [scan.nonce for scan in self.scans]
+        if len(set(nonces)) != len(nonces):
+            raise ValueError("a batch may not repeat a nonce")
         return self
