@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from taxstamp.clock import FixedClock
 from taxstamp.config import Settings
-from taxstamp.models import Stamp
+from taxstamp.models import LedgerEntry, PaymentReceipt, Stamp
 from taxstamp.runtime import Runtime
 from taxstamp.services.issuance import allocate_serial_block
 from taxstamp.worker.relay import relay_once
@@ -117,3 +117,74 @@ def test_concurrent_activation_is_counted_once(
             select(func.count()).select_from(Stamp).where(Stamp.status == "active")
         ).scalar_one()
     assert active == len(serials)
+
+
+def _race_cancel_against_settlement(
+    client: TestClient,
+    settings: Settings,
+    clock: FixedClock,
+    tenant: Tenant,
+    round_index: int,
+) -> tuple[int, int]:
+    created = client.post(
+        "/v1/orders",
+        json={"company_id": str(tenant.company.id), **ORDER_BODY},
+        headers=auth(tenant.requester.token, new_key("order")),
+    ).json()
+    client.post(
+        f"/v1/orders/{created['id']}/approvals",
+        json={"level": "analyst", "decision": "approved", "reason": "documents verified"},
+        headers=auth(tenant.analyst.token, new_key("approve")),
+    )
+    detail = client.get(f"/v1/orders/{created['id']}", headers=auth(tenant.requester.token)).json()
+
+    def cancel() -> int:
+        return client.post(
+            f"/v1/orders/{created['id']}/cancel",
+            json={"reason": "withdrawn by the requester"},
+            headers=auth(tenant.requester.token, new_key("cancel")),
+        ).status_code
+
+    def settle() -> int:
+        return post_remittance(
+            client,
+            Remittance(
+                external_reference=f"BANK-RACE-{round_index}",
+                payment_reference=detail["payment"]["reference"],
+                amount_minor=int(created["total_minor"]),
+                currency="NGN",
+                value_date=clock.now(),
+            ),
+            secret=settings.payment_webhook_secret,
+            now=clock.now(),
+        ).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        cancelling = pool.submit(cancel)
+        settling = pool.submit(settle)
+        return cancelling.result(), settling.result()
+
+
+def test_cancel_and_settlement_race_never_deadlocks(
+    client: TestClient,
+    settings: Settings,
+    clock: FixedClock,
+    tenant: Tenant,
+    session_factory: sessionmaker[Session],
+) -> None:
+    """Both paths lock the order before its intents, so the race resolves either way."""
+    outcomes = [_race_cancel_against_settlement(client, settings, clock, tenant, index) for index in range(4)]
+
+    # A deadlock or an illegal transition would surface as 5xx; every attempt must be decided.
+    for cancel_status, settle_status in outcomes:
+        assert cancel_status in (200, 409), outcomes
+        assert settle_status == 202, outcomes
+
+    with session_factory() as session:
+        receipts = session.execute(select(PaymentReceipt)).scalars().all()
+        entries = session.execute(select(LedgerEntry)).scalars().all()
+    assert len(receipts) == 4
+    assert {receipt.status for receipt in receipts} <= {"matched", "order_not_payable"}
+    assert sum(e.amount_minor for e in entries if e.direction == "debit") == sum(
+        e.amount_minor for e in entries if e.direction == "credit"
+    )

@@ -25,6 +25,7 @@ from taxstamp.enums import (
     PaymentIntentStatus,
     RiskTier,
     Role,
+    TransitionError,
     assert_order_transition,
 )
 from taxstamp.errors import Conflict, Forbidden, IllegalState, NotFound, ValidationFailed
@@ -371,7 +372,11 @@ def cancel_order(
     if actor.role is not Role.ADMIN:
         actor.require_role(Role.REQUESTER)
         actor.require_company(order.company_id)
-    _transition(session, order, OrderStatus.CANCELLED, actor=actor, reason=reason, now=now)
+    try:
+        _transition(session, order, OrderStatus.CANCELLED, actor=actor, reason=reason, now=now)
+    except TransitionError as exc:
+        # The order moved on (paid, issued, already cancelled): a client conflict, not a fault.
+        raise IllegalState(str(exc)) from exc
     open_intents = session.execute(
         select(PaymentIntent)
         .where(
