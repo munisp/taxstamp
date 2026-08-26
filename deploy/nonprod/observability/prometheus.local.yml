@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+scrape_configs:
+  - job_name: keycloak
+    static_configs: [{targets: ["keycloak:9000"]}]
+  - job_name: apisix
+    metrics_path: /apisix/prometheus/metrics
+    static_configs: [{targets: ["apisix:9080"]}]
+  # Taxstamp /metrics remains deliberately excluded until a dedicated, scoped metrics
+  # credential is provisioned. It must never be opened anonymously for scraping.

@@ -1,0 +1,101 @@
+# Disposable validation overlay. Combine with ../../docker-compose.yml. All passwords
+# and endpoints in this file are intentionally local-only and must never be reused.
+services:
+  kafka:
+    image: apache/kafka:3.9.0
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    ports: ["127.0.0.1:19092:9092"]
+
+  kafka-init:
+    image: apache/kafka:3.9.0
+    command:
+      [
+        "/bin/bash",
+        "-ec",
+        "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic taxstamp.events.v1 --partitions 3 --replication-factor 1",
+      ]
+    depends_on:
+      kafka: {condition: service_healthy}
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: local-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: local-admin-not-for-any-real-use
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+    volumes:
+      - ./deploy/nonprod/keycloak/realm-taxstamp.local.json:/opt/keycloak/data/import/realm-taxstamp.local.json:ro
+    ports: ["127.0.0.1:18080:8080", "127.0.0.1:19000:9000"]
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '200' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  permify:
+    image: ghcr.io/permify/permify:v1.2.0
+    ports: ["127.0.0.1:13476:3476", "127.0.0.1:13478:3478"]
+
+  apisix:
+    image: apache/apisix:3.9.0-debian
+    depends_on:
+      keycloak: {condition: service_healthy}
+      permify: {condition: service_started}
+    volumes:
+      - ./deploy/nonprod/apisix/config.local.yaml:/usr/local/apisix/conf/config.yaml:ro
+      - ./deploy/nonprod/apisix/apisix.local.yaml:/usr/local/apisix/conf/apisix.yaml:ro
+    ports: ["127.0.0.1:19080:9080"]
+
+  api:
+    environment:
+      TAXSTAMP_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      TAXSTAMP_KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      TAXSTAMP_KAFKA_TOPIC: taxstamp.events.v1
+      TAXSTAMP_KEYCLOAK_ISSUER_URL: http://keycloak:8080/realms/taxstamp
+      TAXSTAMP_PERMIFY_BASE_URL: http://permify:3476
+      TAXSTAMP_APISIX_ADMIN_URL: http://apisix:9180
+    depends_on:
+      kafka-init: {condition: service_completed_successfully}
+
+  worker:
+    environment:
+      TAXSTAMP_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      TAXSTAMP_KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      TAXSTAMP_KAFKA_TOPIC: taxstamp.events.v1
+    depends_on:
+      kafka-init: {condition: service_completed_successfully}
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"]
+    volumes:
+      - ./deploy/nonprod/observability/prometheus.local.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["127.0.0.1:19090:9090"]
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    environment:
+      GF_SECURITY_ADMIN_USER: local-admin
+      GF_SECURITY_ADMIN_PASSWORD: local-admin-not-for-any-real-use
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./deploy/nonprod/observability/grafana-datasource.yml:/etc/grafana/provisioning/datasources/taxstamp.yml:ro
+    ports: ["127.0.0.1:13000:3000"]

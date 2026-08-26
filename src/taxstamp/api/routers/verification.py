@@ -68,6 +68,7 @@ async def verify(
         raise Unauthenticated("request signature is invalid or stale") from exc
 
     body = VerifyRequest.model_validate(document)
+    actor.require_subject(body.device_id, resource="device_id")
 
     if not runtime.replay_guard.claim(body.device_id, body.nonce):
         raise Unauthenticated("nonce has already been used")

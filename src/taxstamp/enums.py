@@ -85,6 +85,42 @@ class ReceiptStatus(StrEnum):
     DUPLICATE = "duplicate"
 
 
+class TigerBeetleLedgerIntentState(StrEnum):
+    READY = "ready"
+    SUBMISSION_UNCERTAIN = "submission_uncertain"
+    EXTERNAL_CONFIRMED = "external_confirmed"
+    POSTED = "posted"
+    REJECTED = "rejected"
+    QUARANTINED = "quarantined"
+
+
+TIGERBEETLE_LEDGER_INTENT_TRANSITIONS: dict[
+    TigerBeetleLedgerIntentState, frozenset[TigerBeetleLedgerIntentState]
+] = {
+    TigerBeetleLedgerIntentState.READY: frozenset(
+        {
+            TigerBeetleLedgerIntentState.SUBMISSION_UNCERTAIN,
+            TigerBeetleLedgerIntentState.REJECTED,
+            TigerBeetleLedgerIntentState.QUARANTINED,
+        }
+    ),
+    TigerBeetleLedgerIntentState.SUBMISSION_UNCERTAIN: frozenset(
+        {
+            TigerBeetleLedgerIntentState.SUBMISSION_UNCERTAIN,
+            TigerBeetleLedgerIntentState.EXTERNAL_CONFIRMED,
+            TigerBeetleLedgerIntentState.REJECTED,
+            TigerBeetleLedgerIntentState.QUARANTINED,
+        }
+    ),
+    TigerBeetleLedgerIntentState.EXTERNAL_CONFIRMED: frozenset(
+        {TigerBeetleLedgerIntentState.POSTED, TigerBeetleLedgerIntentState.QUARANTINED}
+    ),
+    TigerBeetleLedgerIntentState.POSTED: frozenset(),
+    TigerBeetleLedgerIntentState.REJECTED: frozenset(),
+    TigerBeetleLedgerIntentState.QUARANTINED: frozenset(),
+}
+
+
 class ApprovalLevel(StrEnum):
     ANALYST = "analyst"
     SUPERVISOR = "supervisor"
@@ -152,3 +188,14 @@ def assert_order_transition(current: OrderStatus, target: OrderStatus) -> None:
 
 def assert_stamp_transition(current: StampStatus, target: StampStatus) -> None:
     assert_transition("stamp", STAMP_TRANSITIONS, current, target)
+
+
+def assert_tigerbeetle_ledger_intent_transition(
+    current: TigerBeetleLedgerIntentState,
+    target: TigerBeetleLedgerIntentState,
+) -> None:
+    allowed = TIGERBEETLE_LEDGER_INTENT_TRANSITIONS.get(current, frozenset())
+    if target not in allowed:
+        raise TransitionError(
+            f"tigerbeetle_ledger_intent: illegal transition {current.value} -> {target.value}"
+        )

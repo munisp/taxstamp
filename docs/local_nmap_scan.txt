@@ -1,0 +1,123 @@
+# Nmap 7.94SVN scan initiated Tue Aug 25 11:20:56 2026 as: nmap -sT -sV -Pn --version-light -p 8080,13000,13476,13478,18080,19000,19080,19090,19092,55432,56379 -oN docs/local_nmap_scan.txt 127.0.0.1
+Nmap scan report for localhost (127.0.0.1)
+Host is up (0.00053s latency).
+
+PORT      STATE SERVICE     VERSION
+8080/tcp  open  http-proxy?
+13000/tcp open  unknown
+13476/tcp open  unknown
+13478/tcp open  unknown
+18080/tcp open  unknown
+19000/tcp open  igrid?
+19080/tcp open  http        OpenResty web app server
+19090/tcp open  unknown
+19092/tcp open  unknown
+55432/tcp open  unknown
+56379/tcp open  redis       Redis key-value store
+7 services unrecognized despite returning data. If you know the service/version, please submit the following fingerprints at https://nmap.org/cgi-bin/submit.cgi?new-service :
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port8080-TCP:V=7.94SVN%I=2%D=8/25%Time=6A8D7A9E%P=x86_64-pc-linux-gnu%r
+SF:(GetRequest,1E0,"HTTP/1\.1\x20404\x20Not\x20Found\r\ndate:\x20Tue,\x202
+SF:5\x20Aug\x202026\x2011:21:01\x20GMT\r\nserver:\x20uvicorn\r\ncontent-le
+SF:ngth:\x2052\r\ncontent-type:\x20application/json\r\nx-request-id:\x206a
+SF:45084d-620a-4431-8cfe-bda27ac94325\r\nx-content-type-options:\x20nosnif
+SF:f\r\nx-frame-options:\x20DENY\r\nreferrer-policy:\x20no-referrer\r\ncac
+SF:he-control:\x20no-store\r\ncontent-security-policy:\x20default-src\x20'
+SF:none';\x20frame-ancestors\x20'none'\r\nstrict-transport-security:\x20ma
+SF:x-age=31536000;\x20includeSubDomains\r\n\r\n{\"error\":{\"code\":\"not_
+SF:found\",\"message\":\"Not\x20Found\"}}")%r(HTTPOptions,1E0,"HTTP/1\.1\x
+SF:20404\x20Not\x20Found\r\ndate:\x20Tue,\x2025\x20Aug\x202026\x2011:21:01
+SF:\x20GMT\r\nserver:\x20uvicorn\r\ncontent-length:\x2052\r\ncontent-type:
+SF:\x20application/json\r\nx-request-id:\x2095f323ce-56a5-42ec-8006-3b11b8
+SF:bdd7ec\r\nx-content-type-options:\x20nosniff\r\nx-frame-options:\x20DEN
+SF:Y\r\nreferrer-policy:\x20no-referrer\r\ncache-control:\x20no-store\r\nc
+SF:ontent-security-policy:\x20default-src\x20'none';\x20frame-ancestors\x2
+SF:0'none'\r\nstrict-transport-security:\x20max-age=31536000;\x20includeSu
+SF:bDomains\r\n\r\n{\"error\":{\"code\":\"not_found\",\"message\":\"Not\x2
+SF:0Found\"}}")%r(RTSPRequest,1E0,"HTTP/1\.1\x20404\x20Not\x20Found\r\ndat
+SF:e:\x20Tue,\x2025\x20Aug\x202026\x2011:21:01\x20GMT\r\nserver:\x20uvicor
+SF:n\r\ncontent-length:\x2052\r\ncontent-type:\x20application/json\r\nx-re
+SF:quest-id:\x208a75592c-ba7e-486d-9a06-d38721873dec\r\nx-content-type-opt
+SF:ions:\x20nosniff\r\nx-frame-options:\x20DENY\r\nreferrer-policy:\x20no-
+SF:referrer\r\ncache-control:\x20no-store\r\ncontent-security-policy:\x20d
+SF:efault-src\x20'none';\x20frame-ancestors\x20'none'\r\nstrict-transport-
+SF:security:\x20max-age=31536000;\x20includeSubDomains\r\n\r\n{\"error\":{
+SF:\"code\":\"not_found\",\"message\":\"Not\x20Found\"}}")%r(FourOhFourReq
+SF:uest,1E0,"HTTP/1\.1\x20404\x20Not\x20Found\r\ndate:\x20Tue,\x2025\x20Au
+SF:g\x202026\x2011:21:01\x20GMT\r\nserver:\x20uvicorn\r\ncontent-length:\x
+SF:2052\r\ncontent-type:\x20application/json\r\nx-request-id:\x202f51c8ac-
+SF:8a76-4495-9466-5000b7ff5d79\r\nx-content-type-options:\x20nosniff\r\nx-
+SF:frame-options:\x20DENY\r\nreferrer-policy:\x20no-referrer\r\ncache-cont
+SF:rol:\x20no-store\r\ncontent-security-policy:\x20default-src\x20'none';\
+SF:x20frame-ancestors\x20'none'\r\nstrict-transport-security:\x20max-age=3
+SF:1536000;\x20includeSubDomains\r\n\r\n{\"error\":{\"code\":\"not_found\"
+SF:,\"message\":\"Not\x20Found\"}}");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port13000-TCP:V=7.94SVN%I=2%D=8/25%Time=6A8D7A9E%P=x86_64-pc-linux-gnu%
+SF:r(GenericLines,67,"HTTP/1\.1\x20400\x20Bad\x20Request\r\nContent-Type:\
+SF:x20text/plain;\x20charset=utf-8\r\nConnection:\x20close\r\n\r\n400\x20B
+SF:ad\x20Request")%r(GetRequest,118,"HTTP/1\.0\x20302\x20Found\r\nCache-Co
+SF:ntrol:\x20no-store\r\nContent-Type:\x20text/html;\x20charset=utf-8\r\nL
+SF:ocation:\x20/login\r\nX-Content-Type-Options:\x20nosniff\r\nX-Frame-Opt
+SF:ions:\x20deny\r\nX-Xss-Protection:\x201;\x20mode=block\r\nDate:\x20Tue,
+SF:\x2025\x20Aug\x202026\x2011:21:02\x20GMT\r\nContent-Length:\x2029\r\n\r
+SF:\n<a\x20href=\"/login\">Found</a>\.\n\n")%r(SSLSessionReq,67,"HTTP/1\.1
+SF:\x20400\x20Bad\x20Request\r\nContent-Type:\x20text/plain;\x20charset=ut
+SF:f-8\r\nConnection:\x20close\r\n\r\n400\x20Bad\x20Request")%r(TLSSession
+SF:Req,67,"HTTP/1\.1\x20400\x20Bad\x20Request\r\nContent-Type:\x20text/pla
+SF:in;\x20charset=utf-8\r\nConnection:\x20close\r\n\r\n400\x20Bad\x20Reque
+SF:st");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port13476-TCP:V=7.94SVN%I=2%D=8/25%Time=6A8D7A9D%P=x86_64-pc-linux-gnu%
+SF:r(GenericLines,67,"HTTP/1\.1\x20400\x20Bad\x20Request\r\nContent-Type:\
+SF:x20text/plain;\x20charset=utf-8\r\nConnection:\x20close\r\n\r\n400\x20B
+SF:ad\x20Request")%r(GetRequest,AE,"HTTP/1\.0\x20404\x20Not\x20Found\r\nCo
+SF:ntent-Type:\x20application/json\r\nVary:\x20Origin\r\nDate:\x20Tue,\x20
+SF:25\x20Aug\x202026\x2011:21:01\x20GMT\r\nContent-Length:\x2045\r\n\r\n{\
+SF:"code\":5,\"message\":\"Not\x20Found\",\"details\":\[\]}")%r(SSLSession
+SF:Req,67,"HTTP/1\.1\x20400\x20Bad\x20Request\r\nContent-Type:\x20text/pla
+SF:in;\x20charset=utf-8\r\nConnection:\x20close\r\n\r\n400\x20Bad\x20Reque
+SF:st")%r(TLSSessionReq,67,"HTTP/1\.1\x20400\x20Bad\x20Request\r\nContent-
+SF:Type:\x20text/plain;\x20charset=utf-8\r\nConnection:\x20close\r\n\r\n40
+SF:0\x20Bad\x20Request");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port13478-TCP:V=7.94SVN%I=2%D=8/25%Time=6A8D7A9E%P=x86_64-pc-linux-gnu%
+SF:r(NULL,F,"\0\0\x06\x04\0\0\0\0\0\0\x05\0\0@\0")%r(GenericLines,F,"\0\0\
+SF:x06\x04\0\0\0\0\0\0\x05\0\0@\0")%r(GetRequest,F,"\0\0\x06\x04\0\0\0\0\0
+SF:\0\x05\0\0@\0")%r(SSLSessionReq,F,"\0\0\x06\x04\0\0\0\0\0\0\x05\0\0@\0"
+SF:)%r(TLSSessionReq,F,"\0\0\x06\x04\0\0\0\0\0\0\x05\0\0@\0");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port18080-TCP:V=7.94SVN%I=2%D=8/25%Time=6A8D7AA3%P=x86_64-pc-linux-gnu%
+SF:r(GetRequest,175,"HTTP/1\.0\x20500\x20Internal\x20Server\x20Error\r\nco
+SF:ntent-length:\x2094\r\nContent-Type:\x20application/json\r\nReferrer-Po
+SF:licy:\x20no-referrer\r\nStrict-Transport-Security:\x20max-age=31536000;
+SF:\x20includeSubDomains\r\nX-Content-Type-Options:\x20nosniff\r\nX-Frame-
+SF:Options:\x20SAMEORIGIN\r\nX-XSS-Protection:\x201;\x20mode=block\r\n\r\n
+SF:{\"error\":\"unknown_error\",\"error_description\":\"For\x20more\x20on\
+SF:x20this\x20error\x20consult\x20the\x20server\x20log\.\"}")%r(SSLSession
+SF:Req,2F,"HTTP/1\.0\x20400\x20Bad\x20Request\r\ncontent-length:\x200\r\n\
+SF:r\n")%r(TLSSessionReq,2F,"HTTP/1\.0\x20400\x20Bad\x20Request\r\ncontent
+SF:-length:\x200\r\n\r\n");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port19000-TCP:V=7.94SVN%I=2%D=8/25%Time=6A8D7AA3%P=x86_64-pc-linux-gnu%
+SF:r(GetRequest,44,"HTTP/1\.0\x20200\x20OK\r\ncontent-length:\x2029\r\n\r\
+SF:nKeycloak\x20Management\x20Interface")%r(SSLSessionReq,2F,"HTTP/1\.0\x2
+SF:0400\x20Bad\x20Request\r\ncontent-length:\x200\r\n\r\n")%r(TLSSessionRe
+SF:q,2F,"HTTP/1\.0\x20400\x20Bad\x20Request\r\ncontent-length:\x200\r\n\r\
+SF:n");
+==============NEXT SERVICE FINGERPRINT (SUBMIT INDIVIDUALLY)==============
+SF-Port19090-TCP:V=7.94SVN%I=2%D=8/25%Time=6A8D7A9E%P=x86_64-pc-linux-gnu%
+SF:r(GenericLines,67,"HTTP/1\.1\x20400\x20Bad\x20Request\r\nContent-Type:\
+SF:x20text/plain;\x20charset=utf-8\r\nConnection:\x20close\r\n\r\n400\x20B
+SF:ad\x20Request")%r(GetRequest,A6,"HTTP/1\.0\x20302\x20Found\r\nContent-T
+SF:ype:\x20text/html;\x20charset=utf-8\r\nLocation:\x20/graph\r\nDate:\x20
+SF:Tue,\x2025\x20Aug\x202026\x2011:21:02\x20GMT\r\nContent-Length:\x2029\r
+SF:\n\r\n<a\x20href=\"/graph\">Found</a>\.\n\n")%r(SSLSessionReq,67,"HTTP/
+SF:1\.1\x20400\x20Bad\x20Request\r\nContent-Type:\x20text/plain;\x20charse
+SF:t=utf-8\r\nConnection:\x20close\r\n\r\n400\x20Bad\x20Request")%r(TLSSes
+SF:sionReq,67,"HTTP/1\.1\x20400\x20Bad\x20Request\r\nContent-Type:\x20text
+SF:/plain;\x20charset=utf-8\r\nConnection:\x20close\r\n\r\n400\x20Bad\x20R
+SF:equest");
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Tue Aug 25 11:21:12 2026 -- 1 IP address (1 host up) scanned in 16.14 seconds

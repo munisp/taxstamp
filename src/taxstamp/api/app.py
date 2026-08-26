@@ -53,7 +53,7 @@ def create_app(settings: Settings | None = None, *, runtime: Runtime | None = No
         title="Nigerian Excise Tax Stamp Platform",
         version=__version__,
         lifespan=lifespan,
-        docs_url="/docs" if resolved.env.value != "production" else None,
+        docs_url="/docs" if resolved.env.value == "development" else None,
         redoc_url=None,
     )
     app.state.runtime = active_runtime
@@ -62,6 +62,8 @@ def create_app(settings: Settings | None = None, *, runtime: Runtime | None = No
         RequestContextMiddleware,
         metrics=active_runtime.metrics,
         require_tls=resolved.require_tls,
+        trust_proxy_headers=resolved.trust_proxy_headers,
+        trusted_proxy_cidrs=resolved.trusted_proxy_cidr_list,
     )
     if resolved.trusted_host_list:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=resolved.trusted_host_list)

@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from taxstamp.audit import verify_audit_chain
-from taxstamp.enums import OrderStatus, PaymentIntentStatus, ReceiptStatus
+from taxstamp.enums import OrderStatus, PaymentIntentStatus, ReceiptStatus, TigerBeetleLedgerIntentState
 from taxstamp.jsontypes import JsonObject, JsonValue
 from taxstamp.ledger import Account, account_balance, unbalanced_journals
 from taxstamp.models import (
@@ -26,6 +26,13 @@ from taxstamp.models import (
     ReconciliationRun,
     Stamp,
     StampBatch,
+    TigerBeetleLedgerIntent,
+)
+from taxstamp.services.external_settlement_reconciliation import (
+    ExpectedSettlement,
+    ExternalSettlement,
+    SettlementProvider,
+    reconcile_external_settlements,
 )
 
 
@@ -205,6 +212,43 @@ def _outbox_health(session: Session, *, now: dt.datetime, stale_after_seconds: i
     return Finding(kind="outbox_backlog", count=dead + stale, detail={"dead_lettered": dead, "stale": stale})
 
 
+def _tigerbeetle_intent_health(
+    session: Session, *, now: dt.datetime, stale_after_seconds: int
+) -> Finding | None:
+    stale_states = (
+        TigerBeetleLedgerIntentState.READY.value,
+        TigerBeetleLedgerIntentState.SUBMISSION_UNCERTAIN.value,
+        TigerBeetleLedgerIntentState.EXTERNAL_CONFIRMED.value,
+    )
+    rows = list(
+        session.execute(
+            select(TigerBeetleLedgerIntent.id, TigerBeetleLedgerIntent.state)
+            .where(
+                (TigerBeetleLedgerIntent.state == TigerBeetleLedgerIntentState.QUARANTINED.value)
+                | (
+                    TigerBeetleLedgerIntent.state.in_(stale_states)
+                    & (TigerBeetleLedgerIntent.created_at < now - dt.timedelta(seconds=stale_after_seconds))
+                )
+            )
+            .order_by(TigerBeetleLedgerIntent.created_at)
+            .limit(50)
+        ).all()
+    )
+    if not rows:
+        return None
+    by_state: JsonObject = {}
+    for _, state in rows:
+        existing = by_state.get(state, 0)
+        if isinstance(existing, bool) or not isinstance(existing, int):
+            raise TypeError("TigerBeetle reconciliation state count is not an integer")
+        by_state[state] = existing + 1
+    return Finding(
+        kind="tigerbeetle_intent_control_failure",
+        count=len(rows),
+        detail={"states": by_state, "intent_ids": [str(intent_id) for intent_id, _ in rows]},
+    )
+
+
 def _audit_chain(session: Session, *, secret: str) -> Finding | None:
     verification = verify_audit_chain(session, secret=secret)
     if verification.intact:
@@ -220,12 +264,32 @@ def _audit_chain(session: Session, *, secret: str) -> Finding | None:
     )
 
 
+def _external_settlement_findings(
+    session: Session,
+    *,
+    snapshots: tuple[ExternalSettlement, ...],
+    providers: tuple[SettlementProvider, ...],
+) -> tuple[Finding, ...]:
+    expected = tuple(
+        ExpectedSettlement(reference=row.reference, amount_minor=row.amount_minor, currency=row.currency)
+        for row in session.execute(
+            select(PaymentIntent).where(PaymentIntent.status == PaymentIntentStatus.SETTLED.value)
+        ).scalars()
+    )
+    return tuple(
+        Finding(kind=finding.kind, count=finding.count, detail=finding.detail)
+        for finding in reconcile_external_settlements(expected, snapshots, providers=providers)
+    )
+
+
 def run_reconciliation(
     session: Session,
     *,
     now: dt.datetime,
     audit_secret: str,
     outbox_stale_after_seconds: int = 900,
+    external_settlement_snapshots: tuple[ExternalSettlement, ...] = (),
+    external_settlement_providers: tuple[SettlementProvider, ...] = (),
 ) -> ReconciliationReport:
     checks = [
         _unbalanced_journal_finding(session),
@@ -235,10 +299,19 @@ def run_reconciliation(
         _issuance_count_mismatch(session),
         _duplicate_serials(session),
         _outbox_health(session, now=now, stale_after_seconds=outbox_stale_after_seconds),
+        _tigerbeetle_intent_health(session, now=now, stale_after_seconds=outbox_stale_after_seconds),
         _audit_chain(session, secret=audit_secret),
     ]
-    findings = tuple(finding for finding in checks if finding is not None)
-    report = ReconciliationReport(findings=findings, checks_run=len(checks))
+    external_findings = _external_settlement_findings(
+        session,
+        snapshots=external_settlement_snapshots,
+        providers=external_settlement_providers,
+    )
+    findings = tuple(finding for finding in checks if finding is not None) + external_findings
+    report = ReconciliationReport(
+        findings=findings,
+        checks_run=len(checks) + (1 if external_settlement_providers else 0),
+    )
     session.add(
         ReconciliationRun(
             kind="full",

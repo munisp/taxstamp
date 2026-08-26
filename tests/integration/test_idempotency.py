@@ -60,3 +60,14 @@ def test_in_flight_duplicate_is_rejected(db: Session, principal: uuid.UUID) -> N
     db.commit()
     with pytest.raises(Conflict):
         _claim(db, key, "hash-a", principal)
+
+
+def test_replay_by_another_principal_is_rejected(db: Session, principal: uuid.UUID) -> None:
+    key = uuid.uuid4().hex
+    assert _claim(db, key, "hash-a", principal) is None
+    idempotency.complete(db, scope="test", key=key, status=201, body={"ok": True}, now=NOW)
+    db.commit()
+    other = create_identity(db, role=Role.ADMIN, api_token_secret="x" * 48).principal_id
+    db.commit()
+    with pytest.raises(Conflict, match="another principal"):
+        _claim(db, key, "hash-a", other)

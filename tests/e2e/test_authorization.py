@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
+from taxstamp.clock import FixedClock
 from taxstamp.config import Settings
-from taxstamp.enums import Role
-from tests.support.api import auth, new_key
+from taxstamp.enums import BatchStatus, Role
+from taxstamp.jsontypes import JsonObject
+from taxstamp.models import StampBatch
+from tests.support.api import auth, new_key, signed_headers
 from tests.support.factories import create_company, create_identity
 from tests.support.tenant import Tenant
 
@@ -78,6 +83,40 @@ def test_requester_cannot_read_another_tenants_order(
     assert listing["orders"] == []
 
 
+def test_requester_cannot_read_another_tenants_batch(
+    client: TestClient, tenant: Tenant, settings: Settings, session_factory: sessionmaker[Session]
+) -> None:
+    created = client.post(
+        "/v1/orders",
+        json={"company_id": str(tenant.company.id), **ORDER_BODY},
+        headers=auth(tenant.requester.token, new_key("order")),
+    )
+    assert created.status_code == 201
+    with session_factory() as session:
+        batch = StampBatch(
+            order_id=uuid.UUID(created.json()["id"]),
+            requested_count=1,
+            issued_count=0,
+            status=BatchStatus.PENDING.value,
+        )
+        session.add(batch)
+        session.flush()
+        batch_id = str(batch.id)
+        other_company = create_company(session)
+        outsider = create_identity(
+            session,
+            role=Role.REQUESTER,
+            api_token_secret=settings.api_token_secret,
+            company_id=other_company.id,
+        )
+        session.commit()
+
+    denied = client.get(f"/v1/batches/{batch_id}", headers=auth(outsider.token))
+    assert denied.status_code == 403
+    allowed = client.get(f"/v1/batches/{batch_id}", headers=auth(tenant.requester.token))
+    assert allowed.status_code == 200
+
+
 def test_submitter_cannot_approve_their_own_order(
     client: TestClient, tenant: Tenant, settings: Settings, session_factory: sessionmaker[Session]
 ) -> None:
@@ -139,3 +178,23 @@ def test_idempotency_key_is_required_for_mutations(client: TestClient, tenant: T
     )
     assert response.status_code == 422
     assert "Idempotency-Key" in response.text
+
+
+def test_device_cannot_claim_another_device_identity(
+    client: TestClient, tenant: Tenant, settings: Settings, clock: FixedClock
+) -> None:
+    body: JsonObject = {
+        "serial": "NG-ALC-2026-000001-X",
+        "secure_code": "ABCDEFGHJKLM",
+        "device_id": "other-device",
+        "nonce": "nonce-device-binding",
+    }
+    response = client.post(
+        "/v1/verify",
+        json=body,
+        headers={
+            **auth(tenant.device.token),
+            **signed_headers(body, secret=settings.device_hmac_secret, now=clock.now()),
+        },
+    )
+    assert response.status_code == 403

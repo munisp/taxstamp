@@ -1,0 +1,135 @@
+# Persistent non-production overlay. Combine with docker-compose.yml and supply
+# --env-file deploy/nonprod/.env.nonprod. This file contains no usable secret.
+services:
+  keycloak-db:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: ${KEYCLOAK_DB_USER}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    volumes: ["keycloakdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    command: ["start", "--http-enabled=true", "--proxy-headers=xforwarded", "--hostname=${KEYCLOAK_HOSTNAME}"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD}
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+    depends_on:
+      keycloak-db: {condition: service_healthy}
+    expose: ["8080", "9000"]
+
+  permify:
+    image: ghcr.io/permify/permify:v1.2.0
+    volumes:
+      - ./deploy/nonprod/permify/config.nonprod.yaml:/config/config.yaml:ro
+    command: ["serve", "--config=/config/config.yaml"]
+    depends_on:
+      permify-db: {condition: service_healthy}
+    expose: ["3476", "3478"]
+
+  permify-db:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_DB: permify
+      POSTGRES_USER: ${PERMIFY_DB_USER}
+      POSTGRES_PASSWORD: ${PERMIFY_DB_PASSWORD}
+    volumes: ["permifydata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  kafka:
+    image: apache/kafka:3.9.0
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: SASL_SSL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: SASL_SSL://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,SASL_SSL:SASL_SSL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+    volumes: ["kafkadata:/tmp/kraft-combined-logs", "./deploy/nonprod/kafka:/etc/taxstamp/kafka:ro"]
+    expose: ["9092"]
+
+  api:
+    env_file:
+      - path: ./deploy/nonprod/.env.nonprod
+        required: false
+    environment:
+      TAXSTAMP_ENV: staging
+      TAXSTAMP_REQUIRE_TLS: "true"
+      TAXSTAMP_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      TAXSTAMP_KAFKA_SECURITY_PROTOCOL: SASL_SSL
+      TAXSTAMP_KEYCLOAK_ISSUER_URL: https://${KEYCLOAK_HOSTNAME}/realms/taxstamp
+      TAXSTAMP_PERMIFY_BASE_URL: https://${PERMIFY_HOSTNAME}
+      TAXSTAMP_APISIX_ADMIN_URL: https://${APISIX_ADMIN_HOSTNAME}
+    expose: ["8080"]
+    ports: !reset []
+
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  worker:
+    env_file:
+      - path: ./deploy/nonprod/.env.nonprod
+        required: false
+    environment:
+      TAXSTAMP_ENV: staging
+      TAXSTAMP_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      TAXSTAMP_KAFKA_SECURITY_PROTOCOL: SASL_SSL
+
+  apisix:
+    image: apache/apisix:3.9.0-debian
+    env_file:
+      - path: ./deploy/nonprod/.env.nonprod
+        required: false
+    volumes:
+      - ./deploy/nonprod/apisix/config.persistent.yaml:/usr/local/apisix/conf/config.yaml:ro
+      - ./deploy/nonprod/apisix/apisix.persistent.yaml:/usr/local/apisix/conf/apisix.yaml:ro
+      - ./deploy/nonprod/tls:/etc/taxstamp/tls:ro
+    depends_on: [keycloak, permify, api]
+    ports: ["443:9443"]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./deploy/nonprod/observability/prometheus.persistent.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheusdata:/prometheus
+    expose: ["9090"]
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    env_file:
+      - path: ./deploy/nonprod/.env.nonprod
+        required: false
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./deploy/nonprod/observability/grafana-datasource.yml:/etc/grafana/provisioning/datasources/taxstamp.yml:ro
+    expose: ["3000"]
+
+volumes:
+  keycloakdata:
+  permifydata:
+  kafkadata:
+  prometheusdata:
+  grafanadata:

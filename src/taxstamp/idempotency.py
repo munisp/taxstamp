@@ -68,6 +68,8 @@ def claim(
         savepoint.commit()
         return None
 
+    if existing.principal_id != principal_id:
+        raise Conflict("idempotency key belongs to another principal")
     if existing.request_hash != request_hash:
         raise IdempotencyKeyReused("idempotency key was already used with a different payload")
     if existing.state == STATE_IN_PROGRESS:

@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Taxstamp Field",
+    "slug": "taxstamp-field",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#F4F2EC"
+    },
+    "android": {
+      "package": "ng.taxstamp.field",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B6B62"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "ng.taxstamp.field"
+    },
+    "extra": {
+      "apiSecurity": "Configure a production HTTPS endpoint through managed mobile configuration; no endpoint or secret is bundled."
+    }
+  }
+}

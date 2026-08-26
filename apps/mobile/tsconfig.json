@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "jsx": "react-jsx",
+    "module": "esnext",
+    "target": "es2022",
+    "lib": ["es2022"],
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "allowJs": false,
+    "noEmit": true
+  },
+  "include": ["App.tsx", "../../clients/typescript/taxstamp-contracts.ts"]
+}

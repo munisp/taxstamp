@@ -19,6 +19,7 @@ from taxstamp.jsontypes import JsonObject, require_int, require_str
 from taxstamp.models import OutboxMessage, StampBatch
 from taxstamp.runtime import Runtime
 from taxstamp.services.issuance import issue_order
+from taxstamp.services.tigerbeetle_ledger import submit_intent_lookup_before_retry
 
 logger = structlog.get_logger(__name__)
 SYSTEM_ACTOR = AuditActor(principal_id=None, subject="system:worker", role="operator", company_id=None)
@@ -107,11 +108,21 @@ def handle_mismatch_review(runtime: Runtime, session: Session, payload: JsonObje
     return handle_notify(runtime, session, payload)
 
 
+def handle_tigerbeetle_transfer(runtime: Runtime, session: Session, payload: JsonObject) -> JsonObject:
+    """Process a transfer outside the relay transaction using durable intent state."""
+
+    del session
+    intent_id = uuid.UUID(require_str(payload, "intent_id"))
+    result = submit_intent_lookup_before_retry(runtime, intent_id=intent_id)
+    return {"intent_id": str(intent_id), "result": result}
+
+
 HANDLERS: dict[str, Handler] = {
     "order.issue_stamps": handle_issue_stamps,
     "batch.anchor_requested": handle_anchor_batch,
     "order.awaiting_payment": handle_notify,
     "payment.mismatch_requires_review": handle_mismatch_review,
+    "tigerbeetle.transfer_requested": handle_tigerbeetle_transfer,
 }
 
 

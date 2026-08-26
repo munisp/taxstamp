@@ -1,0 +1,19 @@
+{
+  "realm": "taxstamp",
+  "enabled": true,
+  "displayName": "Taxstamp Local Validation",
+  "roles": {"realm": [{"name": "taxstamp.read"}, {"name": "taxstamp.write"}, {"name": "taxstamp.audit"}]},
+  "clients": [
+    {
+      "clientId": "taxstamp-pwa",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:3000/*"],
+      "webOrigins": ["http://localhost:3000"],
+      "attributes": {"pkce.code.challenge.method": "S256"}
+    }
+  ]
+}

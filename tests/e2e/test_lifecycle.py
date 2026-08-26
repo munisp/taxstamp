@@ -125,7 +125,7 @@ def test_full_lifecycle_order_to_verification(
     body = {
         "serial": serial,
         "secure_code": derive_secure_code(serial, secret=settings.device_hmac_secret),
-        "device_id": "field-device-1",
+        "device_id": tenant.device.subject,
         "nonce": "nonce-" + serial,
     }
     verification = client.post(
@@ -152,9 +152,9 @@ def test_replayed_verification_nonce_is_rejected(
     client: TestClient, settings: Settings, clock: FixedClock, tenant: Tenant, runtime: Runtime
 ) -> None:
     body = {
-        "serial": "NG-ALC-2026-000001-X",
+        "serial": "NG-ALC-2026-999999-A",
         "secure_code": "ABCDEFGHJKLM",
-        "device_id": "field-device-2",
+        "device_id": tenant.device.subject,
         "nonce": "reused-nonce-1",
     }
     headers = {

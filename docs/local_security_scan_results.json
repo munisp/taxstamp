@@ -1,0 +1,120 @@
+{
+  "authentication_boundary": {
+    "direct_api_status": 200,
+    "gateway_status": 401
+  },
+  "findings": [
+    {
+      "evidence": "Service is reachable on the host loopback scan; the disposable Compose stack publishes this port.",
+      "identifier": "HOST_EXPOSED_INTERNAL_SERVICE",
+      "remediation": "In persistent deployment, publish only the gateway and approved monitoring endpoints behind private networking; keep state, broker, authorisation and management ports on the internal Docker network.",
+      "severity": "high",
+      "target": "127.0.0.1:8080 (Taxstamp API)"
+    },
+    {
+      "evidence": "Service is reachable on the host loopback scan; the disposable Compose stack publishes this port.",
+      "identifier": "HOST_EXPOSED_INTERNAL_SERVICE",
+      "remediation": "In persistent deployment, publish only the gateway and approved monitoring endpoints behind private networking; keep state, broker, authorisation and management ports on the internal Docker network.",
+      "severity": "high",
+      "target": "127.0.0.1:19000 (Keycloak management)"
+    },
+    {
+      "evidence": "Service is reachable on the host loopback scan; the disposable Compose stack publishes this port.",
+      "identifier": "HOST_EXPOSED_INTERNAL_SERVICE",
+      "remediation": "In persistent deployment, publish only the gateway and approved monitoring endpoints behind private networking; keep state, broker, authorisation and management ports on the internal Docker network.",
+      "severity": "high",
+      "target": "127.0.0.1:13476 (Permify API)"
+    },
+    {
+      "evidence": "Service is reachable on the host loopback scan; the disposable Compose stack publishes this port.",
+      "identifier": "HOST_EXPOSED_INTERNAL_SERVICE",
+      "remediation": "In persistent deployment, publish only the gateway and approved monitoring endpoints behind private networking; keep state, broker, authorisation and management ports on the internal Docker network.",
+      "severity": "high",
+      "target": "127.0.0.1:13478 (Permify HTTP service)"
+    },
+    {
+      "evidence": "Service is reachable on the host loopback scan; the disposable Compose stack publishes this port.",
+      "identifier": "HOST_EXPOSED_INTERNAL_SERVICE",
+      "remediation": "In persistent deployment, publish only the gateway and approved monitoring endpoints behind private networking; keep state, broker, authorisation and management ports on the internal Docker network.",
+      "severity": "high",
+      "target": "127.0.0.1:19090 (Prometheus)"
+    },
+    {
+      "evidence": "Service is reachable on the host loopback scan; the disposable Compose stack publishes this port.",
+      "identifier": "HOST_EXPOSED_INTERNAL_SERVICE",
+      "remediation": "In persistent deployment, publish only the gateway and approved monitoring endpoints behind private networking; keep state, broker, authorisation and management ports on the internal Docker network.",
+      "severity": "high",
+      "target": "127.0.0.1:19092 (Kafka)"
+    },
+    {
+      "evidence": "Service is reachable on the host loopback scan; the disposable Compose stack publishes this port.",
+      "identifier": "HOST_EXPOSED_INTERNAL_SERVICE",
+      "remediation": "In persistent deployment, publish only the gateway and approved monitoring endpoints behind private networking; keep state, broker, authorisation and management ports on the internal Docker network.",
+      "severity": "high",
+      "target": "127.0.0.1:55432 (PostgreSQL)"
+    },
+    {
+      "evidence": "Service is reachable on the host loopback scan; the disposable Compose stack publishes this port.",
+      "identifier": "HOST_EXPOSED_INTERNAL_SERVICE",
+      "remediation": "In persistent deployment, publish only the gateway and approved monitoring endpoints behind private networking; keep state, broker, authorisation and management ports on the internal Docker network.",
+      "severity": "high",
+      "target": "127.0.0.1:56379 (Redis)"
+    },
+    {
+      "evidence": "Interactive FastAPI documentation returned HTTP 200 on the directly published API port.",
+      "identifier": "API_DOCUMENTATION_EXPOSED",
+      "remediation": "Disable or access-restrict interactive documentation in persistent non-production and production; publish only approved contract documentation through controlled identity-aware access.",
+      "severity": "medium",
+      "target": "http://127.0.0.1:8080/docs"
+    },
+    {
+      "evidence": "Direct API returned 200; gateway returned 401.",
+      "identifier": "PROTECTED_ROUTE_AUTHENTICATION_BOUNDARY",
+      "remediation": "Investigate route authentication immediately; both direct and gateway paths must deny requests without a valid bearer token.",
+      "severity": "high",
+      "target": "/v1/capabilities"
+    },
+    {
+      "evidence": "HTTP 404; missing headers: x-content-type-options, referrer-policy.",
+      "identifier": "MISSING_BROWSER_HARDENING_HEADERS",
+      "remediation": "Set browser hardening headers at APISIX for routed web traffic. Do not treat local HTTP absence of HSTS as a production configuration verdict; enforce HSTS only after TLS is active.",
+      "severity": "low",
+      "target": "http://127.0.0.1:19080"
+    },
+    {
+      "evidence": "HTTP 200; missing headers: x-content-type-options, referrer-policy.",
+      "identifier": "MISSING_BROWSER_HARDENING_HEADERS",
+      "remediation": "Set browser hardening headers at APISIX for routed web traffic. Do not treat local HTTP absence of HSTS as a production configuration verdict; enforce HSTS only after TLS is active.",
+      "severity": "low",
+      "target": "http://127.0.0.1:19090"
+    },
+    {
+      "evidence": "HTTP 200; missing headers: referrer-policy.",
+      "identifier": "MISSING_BROWSER_HARDENING_HEADERS",
+      "remediation": "Set browser hardening headers at APISIX for routed web traffic. Do not treat local HTTP absence of HSTS as a production configuration verdict; enforce HSTS only after TLS is active.",
+      "severity": "low",
+      "target": "http://127.0.0.1:13000"
+    },
+    {
+      "evidence": "TRACE returned HTTP 302.",
+      "identifier": "TRACE_METHOD_ACCEPTED",
+      "remediation": "Deny TRACE at APISIX and all application-facing HTTP listeners.",
+      "severity": "medium",
+      "target": "http://127.0.0.1:13000"
+    }
+  ],
+  "open_ports": {
+    "8080": "Taxstamp API",
+    "13000": "Grafana",
+    "13476": "Permify API",
+    "13478": "Permify HTTP service",
+    "18080": "Keycloak application",
+    "19000": "Keycloak management",
+    "19080": "APISIX gateway",
+    "19090": "Prometheus",
+    "19092": "Kafka",
+    "55432": "PostgreSQL",
+    "56379": "Redis"
+  },
+  "scope": "loopback-only, non-destructive checks against disposable Taxstamp compose stack"
+}

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Deterministic local compliance gate. It uses only committed synthetic fixtures
+# and does not access real KMS/HSM services, evidence portals, or credentials.
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+python_bin="$repo_root/.venv/bin/python"
+yaml_input="${TAXSTAMP_PRECOMMIT_YAML_INPUT:-deploy/nonprod/examples/staging-storage-encryption-attestation.sample.yaml}"
+
+if [[ ! -x "$python_bin" ]]; then
+  echo "Taxstamp compliance hook: missing $python_bin. Create the project virtual environment first." >&2
+  exit 1
+fi
+if [[ "$yaml_input" == /* || "$yaml_input" == *".."* || ! -f "$repo_root/$yaml_input" ]]; then
+  echo "Taxstamp compliance hook: TAXSTAMP_PRECOMMIT_YAML_INPUT must be an existing repository-relative YAML file." >&2
+  exit 1
+fi
+
+cd "$repo_root"
+"$python_bin" scripts/convert_storage_encryption_yaml.py \
+  --input "$yaml_input" \
+  --validate-only
+"$python_bin" scripts/check_storage_encryption.py \
+  --strict-production \
+  --env-file deploy/nonprod/examples/production-storage-encryption.sample.config \
+  --attestation deploy/nonprod/examples/production-storage-encryption-attestation.sample.json \
+  --assets postgres redis opensearch

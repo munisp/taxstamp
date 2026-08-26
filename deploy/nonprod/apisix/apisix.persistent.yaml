@@ -1,0 +1,7 @@
+# Render this file through approved deployment automation with HTTPS discovery, the
+# real client ID, mTLS/TLS policy, and no client secret in the resulting repository.
+# The rendered protected route must set response-rewrite headers:
+# X-Content-Type-Options: nosniff; Referrer-Policy: strict-origin-when-cross-origin;
+# and X-Frame-Options: DENY. Validate those headers through the gateway before promotion.
+routes: []
+upstreams: []

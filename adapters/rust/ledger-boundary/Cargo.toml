@@ -1,0 +1,9 @@
+[package]
+name = "taxstamp-ledger-boundary"
+version = "0.1.0"
+edition = "2021"
+description = "Validated boundary types for TigerBeetle or other double-entry ledger adapters."
+license = "UNLICENSED"
+
+[lib]
+path = "src/lib.rs"

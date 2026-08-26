@@ -49,6 +49,7 @@ jobs:
       - run: make type
       - run: make security
       - run: make audit-deps
+      - run: make package
       - run: make test
       - name: Migration cycle (upgrade, downgrade, upgrade)
         env:
@@ -58,9 +59,73 @@ jobs:
           .venv/bin/alembic downgrade base
           .venv/bin/alembic upgrade head
 
+  strict-storage-encryption-evidence:
+    name: strict storage-encryption evidence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Create the compliance-tool environment
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements-dev.txt
+      - name: Validate synthetic YAML and strict production evidence fixtures
+        run: bash .githooks/pre-commit
+
   image:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build the runtime image
         run: docker build --target runtime -t taxstamp:ci .
+
+  go-gateway-policy:
+    name: go gateway policy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: adapters/go/gatewaypolicy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.2"
+      - run: go list -mod=readonly ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  rust-ledger-boundary:
+    name: rust ledger boundary
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: adapters/rust/ledger-boundary
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.75.0
+        with:
+          components: clippy, rustfmt
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+
+  mobile-foundation:
+    name: mobile foundation typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+          cache: pnpm
+          cache-dependency-path: apps/mobile/pnpm-lock.yaml
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm audit --prod --audit-level=low

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import time
 from dataclasses import dataclass
 
 import structlog
@@ -10,6 +11,7 @@ import structlog
 from taxstamp import outbox
 from taxstamp.db import transaction
 from taxstamp.models import OutboxMessage
+from taxstamp.projection import ProjectionEnvelope
 from taxstamp.runtime import Runtime
 from taxstamp.services.reconciliation import run_reconciliation
 from taxstamp.services.stamps import expire_due_stamps
@@ -47,6 +49,22 @@ def relay_once(runtime: Runtime, *, worker_id: str) -> RelayStats:
                 message = session.get_one(OutboxMessage, message_id)
                 handler = handler_for(message)
                 handler(runtime, session, payload)
+                if runtime.kafka_publisher is not None:
+                    started = time.monotonic()
+                    try:
+                        runtime.kafka_publisher.publish(
+                            ProjectionEnvelope.from_outbox(message, occurred_at=runtime.clock.now())
+                        )
+                    except Exception as exc:
+                        runtime.metrics["kafka_projection_failures"].labels(
+                            event_type=event_type, error_type=type(exc).__name__
+                        ).inc()
+                        raise
+                    else:
+                        runtime.metrics["kafka_projection_published"].labels(event_type=event_type).inc()
+                        runtime.metrics["kafka_projection_duration"].labels(event_type=event_type).observe(
+                            time.monotonic() - started
+                        )
                 outbox.mark_processed(session, message_id, now=runtime.clock.now())
             delivered += 1
         except Exception as exc:  # noqa: BLE001 - a failed delivery must not stop the relay

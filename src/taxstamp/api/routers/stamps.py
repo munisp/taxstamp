@@ -15,7 +15,7 @@ from taxstamp.api.schemas import ActivateStampsRequest, InspectionRequest, VoidS
 from taxstamp.enums import Role
 from taxstamp.errors import NotFound
 from taxstamp.jsontypes import JsonObject
-from taxstamp.models import Inspection, StampBatch
+from taxstamp.models import Inspection, Order, StampBatch
 from taxstamp.services import inspection as inspection_service
 from taxstamp.services import stamps as stamp_service
 
@@ -127,9 +127,16 @@ def get_stamp(serial: str, runtime: RuntimeDep, current: CurrentActor) -> JsonOb
 def get_batch(batch_id: uuid.UUID, runtime: RuntimeDep, current: CurrentActor) -> JsonObject:
     current.actor.require_role(Role.OPERATOR, Role.ADMIN, Role.AUDITOR, Role.REQUESTER)
     with runtime.session_factory() as session:
-        batch = session.get(StampBatch, batch_id)
-        if batch is None:
+        row = session.execute(
+            select(StampBatch, Order)
+            .join(Order, StampBatch.order_id == Order.id)
+            .where(StampBatch.id == batch_id)
+        ).one_or_none()
+        if row is None:
             raise NotFound("batch not found")
+        batch, order = row
+        if current.actor.role is Role.REQUESTER:
+            current.actor.require_company(order.company_id)
         inspection = session.execute(
             select(Inspection).where(Inspection.batch_id == batch.id)
         ).scalar_one_or_none()

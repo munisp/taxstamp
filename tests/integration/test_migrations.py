@@ -44,7 +44,14 @@ def test_downgrade_and_upgrade_round_trip(settings: Settings) -> None:
             for row in connection.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))
         }
     engine.dispose()
-    for expected in ("orders", "stamps", "audit_events", "ledger_entries", "outbox_messages"):
+    for expected in (
+        "orders",
+        "stamps",
+        "audit_events",
+        "ledger_entries",
+        "outbox_messages",
+        "tigerbeetle_ledger_intents",
+    ):
         assert expected in tables
 
 

@@ -1,0 +1,46 @@
+{
+  "schema": "taxstamp.storage-encryption-attestation.v1",
+  "synthetic_example": true,
+  "environment": "production",
+  "key_management": {
+    "provider": "aws_kms",
+    "key_reference": "arn:aws:kms:af-south-1:111122223333:key/7a6b5c4d-3e2f-4198-8a7b-6c5d4e3f2a1b",
+    "hsm_backed": true,
+    "rotation_days": 365,
+    "rotation_evidence_uri": "https://evidence.production.invalid/records/CHG-2026-091/kms-key-rotation",
+    "access_review_evidence_uri": "https://evidence.production.invalid/records/CHG-2026-091/kms-hsm-access-review",
+    "recovery_exercise_evidence_uri": "https://evidence.production.invalid/records/CHG-2026-091/kms-hsm-recovery-exercise"
+  },
+  "assets": {
+    "postgres": {
+      "encryption_at_rest": true,
+      "backup_encryption": true,
+      "storage_scope": "managed-encrypted-service",
+      "key_reference": "arn:aws:kms:af-south-1:111122223333:key/7a6b5c4d-3e2f-4198-8a7b-6c5d4e3f2a1b",
+      "evidence_uri": "https://evidence.production.invalid/records/CHG-2026-091/postgres-storage-encryption",
+      "backup_restore_evidence_uri": "https://evidence.production.invalid/records/CHG-2026-091/postgres-encrypted-backup-restore",
+      "retention_deletion_evidence_uri": "https://evidence.production.invalid/records/CHG-2026-091/postgres-retention-deletion",
+      "verified_at": "2026-08-25T18:30:00Z"
+    },
+    "redis": {
+      "encryption_at_rest": true,
+      "backup_encryption": true,
+      "storage_scope": "managed-encrypted-service",
+      "key_reference": "arn:aws:kms:af-south-1:111122223333:key/7a6b5c4d-3e2f-4198-8a7b-6c5d4e3f2a1b",
+      "evidence_uri": "https://evidence.production.invalid/records/CHG-2026-091/redis-storage-encryption",
+      "backup_restore_evidence_uri": "https://evidence.production.invalid/records/CHG-2026-091/redis-encrypted-backup-restore",
+      "retention_deletion_evidence_uri": "https://evidence.production.invalid/records/CHG-2026-091/redis-retention-deletion",
+      "verified_at": "2026-08-25T18:30:00Z"
+    },
+    "opensearch": {
+      "encryption_at_rest": true,
+      "backup_encryption": true,
+      "storage_scope": "managed-encrypted-service",
+      "key_reference": "arn:aws:kms:af-south-1:111122223333:key/7a6b5c4d-3e2f-4198-8a7b-6c5d4e3f2a1b",
+      "evidence_uri": "https://evidence.production.invalid/records/CHG-2026-091/opensearch-storage-encryption",
+      "backup_restore_evidence_uri": "https://evidence.production.invalid/records/CHG-2026-091/opensearch-encrypted-backup-restore",
+      "retention_deletion_evidence_uri": "https://evidence.production.invalid/records/CHG-2026-091/opensearch-retention-deletion",
+      "verified_at": "2026-08-25T18:30:00Z"
+    }
+  }
+}

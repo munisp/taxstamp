@@ -1,0 +1,23 @@
+# DELIBERATELY INVALID, SYNTHETIC NON-SECRET FIXTURE.
+# Use only to demonstrate that the local hook fails closed. It omits the required
+# redis.backup_encryption field and must never be used for deployment.
+schema: taxstamp.storage-encryption-attestation.v1
+synthetic_example: true
+environment: staging
+key_management:
+  provider: aws_kms
+  key_reference: arn:aws:kms:af-south-1:111122223333:key/4f3e2d1c-0b9a-4876-8c5d-4e3f2a1b0c9d
+  hsm_backed: true
+  rotation_days: 365
+  rotation_evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/kms-key-rotation
+  access_review_evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/kms-hsm-access-review
+  recovery_exercise_evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/kms-hsm-recovery-exercise
+assets:
+  redis:
+    encryption_at_rest: true
+    storage_scope: managed-encrypted-service
+    key_reference: arn:aws:kms:af-south-1:111122223333:key/4f3e2d1c-0b9a-4876-8c5d-4e3f2a1b0c9d
+    evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/redis-storage-encryption
+    backup_restore_evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/redis-encrypted-backup-restore
+    retention_deletion_evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/redis-retention-deletion
+    verified_at: "2026-08-25T18:30:00Z"

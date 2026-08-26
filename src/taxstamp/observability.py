@@ -70,6 +70,9 @@ class Metrics(TypedDict):
     stamps_issued: Counter
     money_posted: Counter
     reconciliation_findings: Gauge
+    kafka_projection_published: Counter
+    kafka_projection_failures: Counter
+    kafka_projection_duration: Histogram
 
 
 def build_metrics(registry: CollectorRegistry) -> Metrics:
@@ -117,6 +120,24 @@ def build_metrics(registry: CollectorRegistry) -> Metrics:
             "taxstamp_reconciliation_findings",
             "Open reconciliation findings by kind",
             ["kind"],
+            registry=registry,
+        ),
+        kafka_projection_published=Counter(
+            "taxstamp_kafka_projection_published_total",
+            "Outbox events successfully published to Kafka by event type",
+            ["event_type"],
+            registry=registry,
+        ),
+        kafka_projection_failures=Counter(
+            "taxstamp_kafka_projection_failures_total",
+            "Kafka projection failures by event type and exception type",
+            ["event_type", "error_type"],
+            registry=registry,
+        ),
+        kafka_projection_duration=Histogram(
+            "taxstamp_kafka_projection_duration_seconds",
+            "Kafka publication duration by event type",
+            ["event_type"],
             registry=registry,
         ),
     )

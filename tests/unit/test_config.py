@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from taxstamp.config import Environment, Settings
+from taxstamp.config import Environment, KmsProvider, Settings
 
 pytestmark = pytest.mark.unit
 
@@ -53,6 +53,27 @@ def test_production_rejects_wildcard_cors() -> None:
         Settings(**{**BASE, "env": Environment.PRODUCTION, "cors_allowed_origins": "*"})
 
 
+def test_production_requires_non_wildcard_trusted_hosts() -> None:
+    with pytest.raises(ValidationError):
+        Settings(**{**BASE, "env": Environment.PRODUCTION})
+    with pytest.raises(ValidationError):
+        Settings(**{**BASE, "env": Environment.PRODUCTION, "trusted_hosts": "*"})
+
+
+def test_production_requires_proxy_cidrs_when_proxy_headers_are_trusted() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            **{
+                **BASE,
+                "env": Environment.PRODUCTION,
+                "trusted_hosts": "api.taxstamp.ng",
+                "trust_proxy_headers": True,
+            }
+        )
+    with pytest.raises(ValidationError):
+        Settings(**{**BASE, "trusted_proxy_cidrs": "not-a-cidr"})
+
+
 def test_production_rejects_unencrypted_database() -> None:
     with pytest.raises(ValidationError):
         Settings(
@@ -67,3 +88,58 @@ def test_production_rejects_unencrypted_database() -> None:
 def test_unknown_setting_is_rejected() -> None:
     with pytest.raises(ValidationError):
         Settings(**{**BASE, "unexpected_option": "1"})
+
+
+def test_integration_endpoint_must_be_http_url() -> None:
+    with pytest.raises(ValidationError):
+        Settings(**{**BASE, "keycloak_issuer_url": "keycloak.internal/realms/taxstamp"})
+
+
+def test_production_rejects_unencrypted_integration_endpoint() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            **{
+                **BASE,
+                "env": Environment.PRODUCTION,
+                "keycloak_issuer_url": "http://keycloak.internal/realms/taxstamp",
+            }
+        )
+
+
+def test_production_requires_secure_kafka_protocol_when_configured() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            **{
+                **BASE,
+                "env": Environment.PRODUCTION,
+                "kafka_bootstrap_servers": "kafka-1.internal:9092",
+                "kafka_security_protocol": "PLAINTEXT",
+            }
+        )
+
+
+def test_staging_requires_storage_encryption_contract() -> None:
+    with pytest.raises(ValidationError):
+        Settings(**{**BASE, "env": Environment.STAGING})
+
+
+def test_production_accepts_complete_kms_hsm_storage_contract() -> None:
+    settings = Settings(
+        **{
+            **BASE,
+            "env": Environment.PRODUCTION,
+            "storage_encryption_required": True,
+            "kms_provider": KmsProvider.AWS_KMS,
+            "kms_key_reference": (
+                "arn:aws:kms:af-south-1:123456789012:key/" "01234567-89ab-cdef-0123-456789abcdef"
+            ),
+            "kms_hsm_backed": True,
+            "storage_encryption_evidence_uri": "https://evidence.taxstamp.ng/changes/CHG-123",
+            "postgres_storage_encryption_attested": True,
+            "redis_storage_encryption_attested": True,
+            "trusted_hosts": "api.taxstamp.ng",
+            "trust_proxy_headers": True,
+            "trusted_proxy_cidrs": "10.10.0.0/16",
+        }
+    )
+    assert settings.kms_provider is KmsProvider.AWS_KMS

@@ -1,0 +1,45 @@
+{
+  "schema": "taxstamp.storage-encryption-attestation.v1",
+  "environment": "staging",
+  "key_management": {
+    "provider": "aws_kms",
+    "key_reference": "arn:aws:kms:REGION:ACCOUNT_ID:key/REPLACE_WITH_KEY_ID",
+    "hsm_backed": true,
+    "rotation_days": 365,
+    "rotation_evidence_uri": "https://evidence.example.ng/changes/REPLACE_WITH_ROTATION_RECORD",
+    "access_review_evidence_uri": "https://evidence.example.ng/changes/REPLACE_WITH_ACCESS_REVIEW",
+    "recovery_exercise_evidence_uri": "https://evidence.example.ng/changes/REPLACE_WITH_KMS_RECOVERY_EXERCISE"
+  },
+  "assets": {
+    "postgres": {
+      "encryption_at_rest": true,
+      "backup_encryption": true,
+      "storage_scope": "managed-encrypted-service",
+      "key_reference": "arn:aws:kms:REGION:ACCOUNT_ID:key/REPLACE_WITH_KEY_ID",
+      "evidence_uri": "https://evidence.example.ng/changes/REPLACE_WITH_POSTGRES_RECORD",
+      "backup_restore_evidence_uri": "https://evidence.example.ng/changes/REPLACE_WITH_POSTGRES_RESTORE_TEST",
+      "retention_deletion_evidence_uri": "https://evidence.example.ng/changes/REPLACE_WITH_POSTGRES_RETENTION_OR_DELETION_RECORD",
+      "verified_at": "2026-01-01T00:00:00Z"
+    },
+    "redis": {
+      "encryption_at_rest": true,
+      "backup_encryption": true,
+      "storage_scope": "managed-encrypted-service",
+      "key_reference": "arn:aws:kms:REGION:ACCOUNT_ID:key/REPLACE_WITH_KEY_ID",
+      "evidence_uri": "https://evidence.example.ng/changes/REPLACE_WITH_REDIS_RECORD",
+      "backup_restore_evidence_uri": "https://evidence.example.ng/changes/REPLACE_WITH_REDIS_RESTORE_TEST",
+      "retention_deletion_evidence_uri": "https://evidence.example.ng/changes/REPLACE_WITH_REDIS_RETENTION_OR_DELETION_RECORD",
+      "verified_at": "2026-01-01T00:00:00Z"
+    },
+    "opensearch": {
+      "encryption_at_rest": true,
+      "backup_encryption": true,
+      "storage_scope": "managed-encrypted-service",
+      "key_reference": "arn:aws:kms:REGION:ACCOUNT_ID:key/REPLACE_WITH_KEY_ID",
+      "evidence_uri": "https://evidence.example.ng/changes/REPLACE_WITH_OPENSEARCH_RECORD",
+      "backup_restore_evidence_uri": "https://evidence.example.ng/changes/REPLACE_WITH_OPENSEARCH_RESTORE_TEST",
+      "retention_deletion_evidence_uri": "https://evidence.example.ng/changes/REPLACE_WITH_OPENSEARCH_RETENTION_OR_DELETION_RECORD",
+      "verified_at": "2026-01-01T00:00:00Z"
+    }
+  }
+}

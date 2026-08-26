@@ -11,4 +11,15 @@ dist/
 build/
 *.egg-info/
 .env
+deploy/nonprod/.env.nonprod
 evidence/
+
+# Generated mobile dependencies and Expo metadata; preserve manifests and lockfiles.
+apps/mobile/node_modules/
+apps/mobile/.expo/
+
+# Generated compiler/test output for the Rust ledger-boundary crate.
+adapters/rust/ledger-boundary/target/
+
+# Local formatter inspection artifacts created during repository review.
+.format_*.diff

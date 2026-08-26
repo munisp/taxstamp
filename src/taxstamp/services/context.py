@@ -39,3 +39,8 @@ class Actor:
             return
         if self.company_id is None or self.company_id != company_id:
             raise Forbidden("resource belongs to another company")
+
+    def require_subject(self, subject: str, *, resource: str) -> None:
+        """Bind a caller-provided identity attribute to the authenticated principal."""
+        if self.subject != subject:
+            raise Forbidden(f"{resource} must match the authenticated principal")

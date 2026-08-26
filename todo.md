@@ -1,0 +1,72 @@
+# Regulated Production Implementation Checklist
+
+- [x] Finalize the target integration contract for PostgreSQL, Redis, TigerBeetle, Mojaloop, Kafka, APISIX, Keycloak, openAppSec, Permify, OpenSearch, Fluvio, Dapr, and lakehouse services.
+- [x] Implement and test tenant-scoped authorization for `GET /v1/batches/{batch_id}`.
+- [x] Add integration-ready configuration models and fail-closed capability declarations for the requested platforms.
+- [x] Add adapter interfaces, health/capability reporting, and safe startup validation without embedding credentials.
+- [x] Document deployment topology, secret ownership, evidence gates, and Nigerian regulated-production prerequisites.
+- [x] Build the PWA operations surface for orders, batches, verification, reconciliation, capability status, and safe API-boundary configuration.
+- [x] Create a shared TypeScript API contract and React Native foundation for Android and iOS field workflows.
+- [x] Add high-value tests for worker lifecycle, authorization boundaries, provider adapters, and critical failure paths.
+- [x] Run full quality gates and record the remaining external validation and production-environment requirements.
+- [x] Assess the available non-production environment, external credentials, and connector access for Keycloak, APISIX, Permify, Kafka, TigerBeetle, and Mojaloop.
+- [x] Create non-production deployment configuration and validation scripts for Keycloak, APISIX, and Permify without placing secrets in source control.
+- [x] Implement a Kafka-compatible transactional outbox projection, consumer observability metrics, and failure/replay controls.
+- [x] Implement TigerBeetle and Mojaloop sandbox reconciliation contracts, mismatch reporting, and safe fail-closed workflows.
+- [x] Validate the new controls locally and document the remaining external account, infrastructure, and sandbox prerequisites.
+- [x] Define a disposable local Docker Compose topology and a persistent non-production override with no production credential defaults.
+- [x] Run a disposable local validation stack for Keycloak, APISIX, Permify, Kafka, metrics, and dependent stores.
+- [x] Package the validated stack for a persistent environment with secret-file, TLS, domain, backup, and operational handoff requirements.
+- [x] Run an isolated local deployment simulation and capture gateway, identity, authorization, Kafka, metrics, and application health evidence.
+- [x] Assess documented technical controls against NDPR/NDPA privacy obligations and applicable CBN cybersecurity, payment, and outsourcing expectations.
+- [x] Create a detailed infrastructure architecture diagram that distinguishes validated local components from external production prerequisites.
+- [x] Prepare and generate an infrastructure simulation and compliance presentation deck.
+- [x] Run a controlled non-destructive penetration test and vulnerability scan against the disposable local non-production stack.
+- [x] Document, prioritize, and validate remediation for material security findings from the local assessment.
+- [x] Produce a step-by-step Nigerian compliance remediation guide covering NDPA/GAID and conditional CBN/payment-system controls.
+- [x] Verify loopback-only bindings and APISIX protected-route behavior using the updated disposable and persistent Compose configurations.
+- [x] Assess Nigerian privacy and conditional payment-cloud data-residency and encryption-at-rest requirements against authoritative sources.
+- [x] Document the verified configuration evidence and the remaining data-protection remediation steps.
+- [x] Assess available KMS/HSM, cloud key-management, and encrypted-storage access without exposing or inventing credentials.
+- [x] Implement provider-neutral KMS/HSM configuration contracts and persistent deployment requirements for encrypted PostgreSQL, Redis, and OpenSearch storage.
+- [x] Create and run an encryption-at-rest compliance check covering PostgreSQL, Redis, and OpenSearch deployment evidence.
+- [x] Document verified encryption evidence, unmet requirements, key-management operations, and regulated-production handoff steps.
+- [x] Add and run strict production-mode validation that enumerates missing KMS/HSM and per-store attestation fields.
+- [x] Produce a safe, non-secret staging KMS/HSM attestation completion guide with field-by-field evidence requirements.
+- [x] Create a safe filled-shape staging KMS/HSM attestation example and validate it with the standard compliance checker.
+- [x] Document the PostgreSQL and Redis encrypted backup-restore and retention/deletion evidence required for staging approval.
+- [x] Create a PostgreSQL and Redis backup-restore/retention log-to-attestation verification checklist.
+- [x] Document exact standard staging versus strict production validation differences.
+- [x] Generate a clearly synthetic, schema-aligned staging YAML attestation example with KMS/HSM and database recovery evidence references.
+- [x] Document the exact strict-production checker command, required non-secret environment variables, and accepted KMS/HSM evidence-URI syntax.
+- [x] Add a safe YAML-to-JSON conversion and schema-validation workflow for the staging attestation sample.
+- [x] Configure and test a repository-local pre-commit hook that runs strict compliance validation against synthetic fixtures only.
+- [x] Document audit and formatting rules for production access-review and recovery-exercise evidence URIs.
+- [x] Demonstrate local pre-commit validation against valid and intentionally broken synthetic attestation fixtures.
+- [x] Document the YAML converter implementation and production evidence URI security rules with exact failure behavior.
+- [ ] Add and validate a GitHub Actions pull-request workflow that enforces synthetic strict-production compliance checks.
+- [ ] Create a comprehensive synthetic production attestation with complete KMS/HSM and storage evidence fields.
+- [ ] Document exact URI validator edge-case behavior, including trailing slashes and explicit port numbers.
+- [x] Assess code-level feature completeness, integration maturity, and outstanding regulated-production gaps.
+- [x] Capture and deliver the exact uncommitted working-tree diff and safe GitHub Actions commit/merge procedure.
+- [x] Assess TigerBeetle, Mojaloop, and OpenSearch implementation maturity and remaining delivery work.
+- [x] Produce a prioritized roadmap for closing critical regulated-production launch gaps.
+- [x] Document safe workflow-only staging and commit commands that exclude generated build artifacts.
+- [x] Produce a concrete TigerBeetle and Mojaloop live-client, settlement-onboarding, reconciliation, and acceptance implementation plan.
+- [x] Document a non-destructive generated-artifact cleanup procedure and source-control ignore-rule changes.
+- [x] Design the durable PostgreSQL-to-TigerBeetle intent/outbox state machine, retry semantics, reconciliation, and failure handling.
+- [x] Implement the durable `tigerbeetle_ledger_intent` schema, migration, constraints, and state-machine persistence boundary.
+- [x] Implement and test replay-safe TigerBeetle lookup-before-retry submission behavior with no live provider connection.
+- [x] Run isolated migration and quality verification and document exact migration plus Go/Rust retry-loop guidance.
+- [x] Document the durable TigerBeetle outbox worker path, current Rust-boundary integration point, and remaining adapter boundary.
+- [x] Review existing TigerBeetle ledger-intent tests for duplicate/race behavior and document remaining real-cluster concurrency gaps.
+- [x] Produce a comprehensive migration and rollback verification checklist for `tigerbeetle_ledger_intents`.
+- [x] Build a repository-wide claim-and-coverage inventory with target-revision and dirty-working-tree evidence.
+- [x] Audit reachable code, configuration, migrations, tests, and delivery paths for actionable incomplete, simulated, unsafe, or incorrectly claimed behavior.
+- [x] Remediate validated local assurance findings and add regression evidence without weakening controls.
+- [x] Run reproducible isolated verification and classify external integration, credential, and production-evidence blockers.
+- [x] Deliver a signed-style assurance report with traceability, finding disposition, and a truthful release decision.
+- [x] Apply the attached codebase defect-discovery framework to the complete working tree and triage every material finding.
+- [x] Remediate every safely actionable finding from the attached framework with regression evidence and without weakening controls.
+- [x] Re-run the affected complete verification suite and update the assurance evidence with the resulting disposition.
+- [ ] Commit the verified full working tree and push it to the selected GitHub repository branch.

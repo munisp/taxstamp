@@ -20,9 +20,11 @@ from taxstamp.config import Settings, get_settings
 from taxstamp.db import create_db_engine, create_session_factory
 from taxstamp.gates import RateLimiter, ReplayGuard
 from taxstamp.observability import Metrics, build_metrics
+from taxstamp.projection import KafkaProjectionPublisher, ProjectionPublisher
 from taxstamp.providers.anchor import AnchorService
 from taxstamp.providers.base import ProviderClient, ProviderConfig
 from taxstamp.providers.compliance import ComplianceService, Registry
+from taxstamp.tigerbeetle import TigerBeetleClient
 
 
 def _provider(settings: Settings, name: str, base_url: str) -> ProviderClient:
@@ -49,6 +51,8 @@ class Runtime:
     clock: Clock
     registry: CollectorRegistry
     metrics: Metrics
+    kafka_publisher: ProjectionPublisher | None
+    tigerbeetle_client: TigerBeetleClient | None
 
     def check_database(self) -> bool:
         try:
@@ -67,6 +71,8 @@ class Runtime:
     def close(self) -> None:
         # redis-py does not annotate Redis.close
         self.redis.close()  # type: ignore[no-untyped-call]
+        if isinstance(self.kafka_publisher, KafkaProjectionPublisher):
+            self.kafka_publisher.close()
         self.engine.dispose()
 
 
@@ -104,4 +110,6 @@ def build_runtime(
         clock=clock or SystemClock(),
         registry=registry,
         metrics=build_metrics(registry),
+        kafka_publisher=KafkaProjectionPublisher(resolved) if resolved.kafka_bootstrap_servers else None,
+        tigerbeetle_client=None,
     )

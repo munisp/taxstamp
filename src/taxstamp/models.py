@@ -41,6 +41,7 @@ from taxstamp.enums import (
     RiskTier,
     Role,
     StampStatus,
+    TigerBeetleLedgerIntentState,
     VerificationOutcome,
 )
 from taxstamp.jsontypes import JsonObject
@@ -297,6 +298,60 @@ class PaymentReceipt(Base):
     __table_args__ = (
         _enum_check("status", ReceiptStatus),
         CheckConstraint("amount_minor > 0", name="amount_positive"),
+    )
+
+
+class TigerBeetleLedgerIntent(Base):
+    """Durable local intent for one replay-safe TigerBeetle transfer.
+
+    The worker never creates an external transfer until this record and the matching
+    outbox message have committed. Financial fields are immutable in PostgreSQL after
+    creation; only the state, evidence and operational error fields may change.
+    """
+
+    __tablename__ = "tigerbeetle_ledger_intents"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    payment_intent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("payment_intents.id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    tigerbeetle_transfer_id: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    debit_account_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    credit_account_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    ledger_code: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    transfer_code: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    transfer_flags: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default=TigerBeetleLedgerIntentState.READY)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    external_timestamp: Mapped[int | None] = mapped_column(BigInteger)
+    external_confirmed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    posted_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[dt.datetime] = _created_at()
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        _enum_check("state", TigerBeetleLedgerIntentState),
+        CheckConstraint("amount_minor > 0", name="amount_positive"),
+        CheckConstraint("debit_account_id <> credit_account_id", name="accounts_must_differ"),
+        CheckConstraint("ledger_code > 0 AND ledger_code <= 4294967295", name="ledger_code_range"),
+        CheckConstraint("transfer_code >= 0 AND transfer_code <= 65535", name="transfer_code_range"),
+        CheckConstraint("transfer_flags >= 0", name="transfer_flags_non_negative"),
+        CheckConstraint("attempt_count >= 0", name="attempt_count_non_negative"),
+        CheckConstraint("char_length(currency) = 3 AND currency = upper(currency)", name="currency_format"),
+        CheckConstraint("tigerbeetle_transfer_id ~ '^[0-9a-f]{32}$'", name="transfer_id_lower_hex"),
+        CheckConstraint("debit_account_id ~ '^[0-9a-f]{32}$'", name="debit_account_lower_hex"),
+        CheckConstraint("credit_account_id ~ '^[0-9a-f]{32}$'", name="credit_account_lower_hex"),
+        CheckConstraint("payload_hash ~ '^[0-9a-f]{64}$'", name="payload_hash_lower_hex"),
+        Index("ix_tigerbeetle_ledger_intents_state_created", "state", "created_at"),
     )
 
 

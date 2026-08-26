@@ -1,0 +1,29 @@
+routes:
+  - id: taxstamp-api
+    uri: /v1/*
+    upstream:
+      type: roundrobin
+      nodes:
+        "api:8080": 1
+    plugins:
+      openid-connect:
+        client_id: taxstamp-pwa
+        # Required by the APISIX plugin schema even in bearer-only/JWKS mode.
+        # This local-only value is not a deployable client secret.
+        client_secret: local-dev-client-secret-never-reuse
+        discovery: http://keycloak:8080/realms/taxstamp/.well-known/openid-configuration
+        bearer_only: true
+        use_jwks: true
+      response-rewrite:
+        headers:
+          set:
+            X-Content-Type-Options: nosniff
+            Referrer-Policy: strict-origin-when-cross-origin
+            X-Frame-Options: DENY
+  - id: apisix-metrics
+    uri: /apisix/prometheus/metrics
+    plugins:
+      public-api: {}
+      prometheus: {}
+upstreams: []
+#END

@@ -80,9 +80,14 @@ def _verify(
     serial: str,
     code: str,
     nonce: str,
-    device_id: str = "device-a",
+    device_id: str | None = None,
 ) -> dict[str, object]:
-    body = {"serial": serial, "secure_code": code, "device_id": device_id, "nonce": nonce}
+    body = {
+        "serial": serial,
+        "secure_code": code,
+        "device_id": device_id or tenant.device.subject,
+        "nonce": nonce,
+    }
     response = client.post(
         "/v1/verify",
         json=body,
@@ -189,3 +194,4 @@ def test_every_attempt_is_recorded(
         attempts = session.execute(select(Verification)).scalars().all()
     assert len(attempts) == 1
     assert attempts[0].outcome == "secure_code_mismatch"
+    assert attempts[0].device_id == tenant.device.subject

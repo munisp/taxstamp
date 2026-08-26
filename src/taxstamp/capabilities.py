@@ -18,6 +18,7 @@ from taxstamp.jsontypes import JsonObject
 class CapabilityState(StrEnum):
     IMPLEMENTED = "implemented"
     REQUIRES_CONFIGURATION = "requires_configuration"
+    CONFIGURED_NOT_VERIFIED = "configured_not_verified"
     NOT_IMPLEMENTED = "not_implemented"
 
 
@@ -74,6 +75,18 @@ _STATIC: tuple[Capability, ...] = (
 
 
 def capability_report(settings: Settings) -> list[Capability]:
+    def integration(
+        name: str,
+        configured: bool,
+        configured_detail: str,
+        missing_detail: str,
+    ) -> Capability:
+        return Capability(
+            name,
+            CapabilityState.CONFIGURED_NOT_VERIFIED if configured else CapabilityState.REQUIRES_CONFIGURATION,
+            configured_detail if configured else missing_detail,
+        )
+
     dynamic = [
         Capability(
             "regulatory_compliance_check",
@@ -86,6 +99,83 @@ def capability_report(settings: Settings) -> list[Capability]:
             if settings.ledger_anchor_base_url
             else CapabilityState.REQUIRES_CONFIGURATION,
             "Merkle root computed locally; external notarisation requires an anchoring service",
+        ),
+        integration(
+            "tigerbeetle_subledger",
+            bool(settings.tigerbeetle_addresses),
+            "Addresses configured; account mapping, transfer reconciliation, credentials and "
+            "production acceptance remain required",
+            "TigerBeetle transaction-plane addresses are not configured",
+        ),
+        integration(
+            "mojaloop_settlement_adapter",
+            bool(settings.mojaloop_base_url),
+            "Endpoint configured; scheme onboarding, signed credentials, sandbox conformance "
+            "and settlement reconciliation remain required",
+            "Mojaloop settlement endpoint is not configured",
+        ),
+        integration(
+            "kafka_event_transport",
+            bool(settings.kafka_bootstrap_servers),
+            "Bootstrap servers configured; topic ACLs, schema compatibility, consumer evidence "
+            "and production delivery validation remain required",
+            "Kafka bootstrap servers are not configured",
+        ),
+        integration(
+            "apisix_gateway",
+            bool(settings.apisix_admin_url),
+            "Gateway management endpoint configured; declarative routes, TLS, policy tests and "
+            "change control remain required",
+            "APISIX management endpoint is not configured",
+        ),
+        integration(
+            "keycloak_identity",
+            bool(settings.keycloak_issuer_url),
+            "OIDC issuer configured; realm, client, PKCE, claims, key rotation and conformance "
+            "evidence remain required",
+            "Keycloak OIDC issuer is not configured",
+        ),
+        integration(
+            "openappsec_ingress_protection",
+            bool(settings.openappsec_management_url),
+            "Management endpoint configured; detection-mode baselining, enforcement policy and "
+            "attack-test evidence remain required",
+            "openAppSec management endpoint is not configured",
+        ),
+        integration(
+            "permify_authorization",
+            bool(settings.permify_base_url),
+            "Authorization endpoint configured; schema publication, tuple migration, decision "
+            "logging and negative-access evidence remain required",
+            "Permify authorization endpoint is not configured",
+        ),
+        integration(
+            "opensearch_projection",
+            bool(settings.opensearch_url),
+            "Search endpoint configured; projection pipeline, retention policy, access controls "
+            "and replay validation remain required",
+            "OpenSearch endpoint is not configured",
+        ),
+        integration(
+            "fluvio_edge_streaming",
+            bool(settings.fluvio_cluster_url),
+            "Cluster endpoint configured; edge use case, delivery semantics and duplicate-bus "
+            "controls remain required",
+            "Fluvio cluster endpoint is not configured",
+        ),
+        integration(
+            "dapr_service_runtime",
+            bool(settings.dapr_http_url),
+            "Sidecar endpoint configured; component manifests, mTLS, resiliency policy and "
+            "workflow evidence remain required",
+            "Dapr sidecar endpoint is not configured",
+        ),
+        integration(
+            "lakehouse_analytics_projection",
+            bool(settings.lakehouse_catalog_url),
+            "Catalog endpoint configured; immutable dataset policy, lineage, retention and "
+            "regulated-reporting validation remain required",
+            "Lakehouse catalog endpoint is not configured",
         ),
     ]
     return sorted([*_STATIC, *dynamic], key=lambda capability: capability.name)

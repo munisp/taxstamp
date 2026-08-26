@@ -1,0 +1,9 @@
+# Review against the deployed Permify version before use. Passwords must be injected
+# by the persistent deployment, never committed here.
+# Render this URI from a secret manager before deployment. The endpoint must be an
+# internal persistent database; never put provider or database secrets in source.
+database:
+  engine: postgres
+  uri: postgresql://REPLACE_FROM_SECRET_MANAGER@permify-postgres:5432/permify
+log:
+  level: info

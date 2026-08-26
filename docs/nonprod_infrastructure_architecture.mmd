@@ -1,0 +1,76 @@
+flowchart LR
+  classDef validated fill:#0B6B62,color:#ffffff,stroke:#06433D,stroke-width:2px
+  classDef state fill:#1E293B,color:#ffffff,stroke:#0F172A,stroke-width:2px
+  classDef security fill:#C97824,color:#ffffff,stroke:#8A4E13,stroke-width:2px
+  classDef planned fill:#F4F2EC,color:#384740,stroke:#90A099,stroke-width:1px,stroke-dasharray: 5 5
+  classDef governance fill:#F9E7D0,color:#6D4212,stroke:#B97826,stroke-width:2px
+
+  subgraph Actors[Operational clients]
+    PWA[Taxstamp PWA]
+    Mobile[React Native field client]
+    Operator[Operator and auditor]
+  end
+
+  subgraph Gateway[Identity and gateway boundary — locally simulated]
+    APISIX[APISIX gateway<br/>OIDC bearer enforcement]
+    Keycloak[Keycloak<br/>realm and PKCE client]
+    Permify[Permify<br/>authorization boundary]
+    WAF[openAppSec<br/>configuration-ready]
+  end
+
+  subgraph Core[Taxstamp application plane]
+    API[FastAPI API<br/>tenant roles, signatures, audit]
+    Worker[Outbox worker<br/>retries and health]
+    Recon[Reconciliation service<br/>fail-closed findings]
+  end
+
+  subgraph State[State and evidence plane]
+    PG[(PostgreSQL<br/>business state and audit evidence)]
+    Redis[(Redis<br/>replay, rate limits, leases)]
+    Kafka[Kafka<br/>taxstamp.events.v1]
+    Prom[Prometheus]
+    Grafana[Grafana]
+  end
+
+  subgraph External[External systems — not live in simulation]
+    TB[TigerBeetle sandbox<br/>double-entry transfer evidence]
+    ML[Mojaloop sandbox<br/>settlement evidence]
+    Search[OpenSearch projection]
+    Lake[Lakehouse projection]
+  end
+
+  subgraph Governance[Nigerian compliance and assurance]
+    NDPC[NDPC / NDPA / GAID<br/>privacy governance]
+    CBN[CBN / payment-system<br/>conditional obligations]
+  end
+
+  PWA --> APISIX
+  Mobile --> APISIX
+  Operator --> APISIX
+  APISIX -. OIDC discovery and JWKS .-> Keycloak
+  APISIX -. authorization model .-> Permify
+  WAF -. planned ingress policy .-> APISIX
+  APISIX --> API
+  API <--> PG
+  API <--> Redis
+  API --> Worker
+  Worker <--> PG
+  Worker <--> Redis
+  Worker --> Kafka
+  Kafka -. future projection .-> Search
+  Kafka -. future governed projection .-> Lake
+  API --> Recon
+  Recon <--> PG
+  TB -. reviewed snapshot export .-> Recon
+  ML -. reviewed snapshot export .-> Recon
+  Prom -. scrape discovery .-> Keycloak
+  Prom -. scrape discovery .-> APISIX
+  Prom --> Grafana
+  NDPC -. governance evidence .-> API
+  CBN -. conditional control evidence .-> Recon
+
+  class APISIX,Keycloak,Permify,Kafka,Prom,API,Worker,PG,Redis,Recon validated
+  class PWA,Mobile,Operator state
+  class WAF security
+  class TB,ML,Search,Lake planned
+  class NDPC,CBN governance

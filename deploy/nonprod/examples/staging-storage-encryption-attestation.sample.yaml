@@ -1,0 +1,36 @@
+# SYNTHETIC, NON-DEPLOYABLE EXAMPLE ONLY.
+# The checker currently consumes JSON attestations. This YAML is a human-review
+# source/sample; copy its real values into the protected JSON attestation used by
+# the checker. No key material, credentials, HSM PINs, or customer data belong here.
+schema: taxstamp.storage-encryption-attestation.v1
+synthetic_example: true
+environment: staging
+key_management:
+  provider: aws_kms
+  key_reference: arn:aws:kms:af-south-1:111122223333:key/4f3e2d1c-0b9a-4876-8c5d-4e3f2a1b0c9d
+  hsm_backed: true
+  rotation_days: 365
+  rotation_evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/kms-key-rotation
+  access_review_evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/kms-hsm-access-review
+  recovery_exercise_evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/kms-hsm-recovery-exercise
+assets:
+  postgres:
+    encryption_at_rest: true
+    backup_encryption: true
+    storage_scope: managed-encrypted-service
+    key_reference: arn:aws:kms:af-south-1:111122223333:key/4f3e2d1c-0b9a-4876-8c5d-4e3f2a1b0c9d
+    evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/postgres-storage-encryption
+    backup_restore_evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/postgres-encrypted-backup-restore
+    retention_deletion_evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/postgres-retention-deletion
+    verified_at: "2026-08-25T18:30:00Z"
+  redis:
+    encryption_at_rest: true
+    backup_encryption: true
+    storage_scope: managed-encrypted-service
+    key_reference: arn:aws:kms:af-south-1:111122223333:key/4f3e2d1c-0b9a-4876-8c5d-4e3f2a1b0c9d
+    evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/redis-storage-encryption
+    backup_restore_evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/redis-encrypted-backup-restore
+    retention_deletion_evidence_uri: https://evidence.staging.invalid/records/CHG-2026-042/redis-retention-deletion
+    verified_at: "2026-08-25T18:30:00Z"
+# OpenSearch is intentionally omitted because it has not been provisioned in the
+# staging topology. Run the standard checker with --assets postgres redis until it exists.
